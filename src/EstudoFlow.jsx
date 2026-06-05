@@ -1,0 +1,852 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, AreaChart, Area
+} from "recharts";
+import {
+  LayoutDashboard, BookOpen, Clock, Settings, Sun, Moon, Play, Pause,
+  Square, SkipForward, Plus, X, Check, Flame, TrendingUp, Calendar,
+  ChevronLeft, ChevronRight, Trash2, Edit3, Save, FileText, Filter, Menu,
+  Dumbbell, BookMarked, Beaker, Globe, Calculator, Atom, Pen, Music,
+  Code, Palette, Heart, Mountain, Bike, Target, BarChart3, RotateCcw,
+  Download, Upload, Printer, Award, Wifi, WifiOff, Database
+} from "lucide-react";
+
+/* ─── Supabase ─── */
+const SB_URL = import.meta.env.VITE_SUPABASE_URL || "https://nbxizbbhvcukmhsbprvc.supabase.co";
+const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ieGl6YmJodmN1a21oc2JwcnZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyOTI4NjIsImV4cCI6MjA5MTg2ODg2Mn0._YzJLYUpBghwMeLGoLU62Sor9vSJAtOrljfe4YzAjNs";
+const SB_HDR = { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
+
+const sbLoad = async () => {
+  const r = await fetch(`${SB_URL}/rest/v1/estudoflow?id=eq.default&select=data`, { headers: SB_HDR });
+  if (!r.ok) throw new Error("load failed");
+  const rows = await r.json();
+  return rows[0]?.data || null;
+};
+
+const sbSave = async (data) => {
+  const r = await fetch(`${SB_URL}/rest/v1/estudoflow`, {
+    method: "POST",
+    headers: { ...SB_HDR, "Prefer": "resolution=merge-duplicates" },
+    body: JSON.stringify({ id: "default", data, updated_at: new Date().toISOString() })
+  });
+  if (!r.ok) throw new Error("save failed");
+};
+
+/* ─── Helpers ─── */
+const uid = () => Math.random().toString(36).slice(2, 10);
+const pad = (n) => String(n).padStart(2, "0");
+const fmtDur = (m) => { if (!m) return "0m"; const h = Math.floor(m / 60); return h > 0 ? `${h}h ${pad(m % 60)}m` : `${m % 60}m`; };
+const fmtT = (s) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+const TODAY = new Date();
+const toK = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const pK = (k) => { const p = k.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+const MO = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+const CATS = [
+  { id: "estudos", label: "Estudos", icon: BookOpen, color: "#6366f1" },
+  { id: "exercicios", label: "Exercícios Físicos", icon: Dumbbell, color: "#10b981" },
+  { id: "leituras", label: "Leituras", icon: BookMarked, color: "#f59e0b" },
+];
+const ICO = [
+  { n: "Beaker", c: Beaker },{ n: "Globe", c: Globe },{ n: "Calculator", c: Calculator },
+  { n: "Atom", c: Atom },{ n: "Pen", c: Pen },{ n: "BookMarked", c: BookMarked },
+  { n: "Code", c: Code },{ n: "Palette", c: Palette },{ n: "Music", c: Music },
+  { n: "Heart", c: Heart },{ n: "Mountain", c: Mountain },{ n: "Bike", c: Bike },
+  { n: "Dumbbell", c: Dumbbell },{ n: "Target", c: Target },{ n: "BookOpen", c: BookOpen },
+  { n: "Flame", c: Flame },
+];
+const COLS = ["#6366f1","#8b5cf6","#ec4899","#f43f5e","#f59e0b","#10b981","#06b6d4","#3b82f6","#84cc16","#d946ef"];
+const EMO = ["🧑‍💻","👨‍🎓","👩‍🔬","🧑‍🏫","🦸","🧑‍💼","🧑‍🚀","🧙","🦊","🐱","🦉","🐼","🎯","🚀","💎","🔥","⚡","🌊","🎨","🏆","🎓","📚","🧬","🏋️"];
+const gI = (n) => ICO.find((i) => i.n === n)?.c || BookOpen;
+
+const mkSubs = () => [
+  { id: uid(), name: "Biologia", icon: "Beaker", color: "#6366f1", category: "estudos" },
+  { id: uid(), name: "História", icon: "Globe", color: "#f59e0b", category: "estudos" },
+  { id: uid(), name: "Matemática", icon: "Calculator", color: "#10b981", category: "estudos" },
+  { id: uid(), name: "Literatura", icon: "BookMarked", color: "#ec4899", category: "estudos" },
+  { id: uid(), name: "Química", icon: "Atom", color: "#06b6d4", category: "estudos" },
+  { id: uid(), name: "CTFL - Fundamentos de Teste", icon: "Code", color: "#8b5cf6", category: "estudos" },
+  { id: uid(), name: "Jiu-Jitsu", icon: "Dumbbell", color: "#10b981", category: "exercicios" },
+  { id: uid(), name: "Musculação", icon: "Flame", color: "#f43f5e", category: "exercicios" },
+  { id: uid(), name: "O Programador Pragmático", icon: "BookOpen", color: "#3b82f6", category: "leituras" },
+  { id: uid(), name: "Clean Code", icon: "Code", color: "#84cc16", category: "leituras" },
+];
+
+/* ─── Tiny components ─── */
+function Mdl({ open, onClose, title, children, dk }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={`w-full max-w-md rounded-2xl p-5 max-h-[85vh] overflow-y-auto ${dk ? "bg-gray-900 border border-white/10" : "bg-white shadow-2xl border border-gray-100"}`}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className={`text-base font-bold ${dk ? "text-white" : "text-gray-800"}`}>{title}</h3>
+          <button onClick={onClose} className={`p-1.5 rounded-lg ${dk ? "hover:bg-white/10 text-gray-400" : "hover:bg-gray-100 text-gray-400"}`}><X size={16} /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Ring({ pct, sz = 110, sw = 9, dk }) {
+  const r = (sz - sw) / 2, c = 2 * Math.PI * r, v = Math.min(pct || 0, 100);
+  return (
+    <svg width={sz} height={sz} className="-rotate-90">
+      <circle cx={sz/2} cy={sz/2} r={r} fill="none" stroke={dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"} strokeWidth={sw} />
+      <circle cx={sz/2} cy={sz/2} r={r} fill="none" stroke="url(#rg)" strokeWidth={sw} strokeDasharray={c} strokeDashoffset={c - (v / 100) * c} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.8s" }} />
+      <defs><linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#6366f1" /><stop offset="100%" stopColor="#a78bfa" /></linearGradient></defs>
+    </svg>
+  );
+}
+
+function CTip({ active, payload, dark }) {
+  if (!active || !payload?.[0]) return null;
+  const d = payload[0].payload, l = d.day || d.date || d.name || "", v = payload[0].value;
+  return <div className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-xl ${dark ? "bg-gray-800 text-white" : "bg-white text-gray-800 border"}`}>{l}: {v < 200 ? v + "h" : fmtDur(v)}</div>;
+}
+
+/* ═══════════════ MAIN ═══════════════ */
+export default function EstudoFlow() {
+  const [dk, setDk] = useState(false);
+  const [pg, setPg] = useState("Dashboard");
+  const [sb, setSb] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("idle"); // "idle" | "saving" | "saved" | "error"
+
+  const [subjects, setSubjects] = useState([]);
+  const [records, setRecords] = useState([]);
+  const [goals, setGoals] = useState([]);
+  const [profile, setProfile] = useState({ name: "André S.", emoji: "🧑‍💻" });
+  const [notif, setNotif] = useState(null);
+
+  /* ── Load from Supabase ── */
+  useEffect(() => {
+    const fallback = setTimeout(() => {
+      if (!loaded) { setSubjects(mkSubs()); setLoaded(true); }
+    }, 5000);
+
+    sbLoad().then((d) => {
+      clearTimeout(fallback);
+      if (d && d.subjects && d.subjects.length > 0) {
+        setSubjects(d.subjects);
+        setRecords(d.records || []);
+        setGoals(d.goals || []);
+        setProfile(d.profile || { name: "André S.", emoji: "🧑‍💻" });
+        if (typeof d.dark === "boolean") setDk(d.dark);
+      } else {
+        setSubjects(mkSubs());
+      }
+      setLoaded(true);
+    }).catch(() => {
+      clearTimeout(fallback);
+      setSubjects(mkSubs());
+      setLoaded(true);
+      setSyncStatus("error");
+    });
+
+    return () => clearTimeout(fallback);
+  }, []);
+
+  /* ── Save to Supabase (debounced) ── */
+  const saveRef = useRef(null);
+  const isFirst = useRef(true);
+  useEffect(() => {
+    if (!loaded) return;
+    if (isFirst.current) { isFirst.current = false; return; }
+    clearTimeout(saveRef.current);
+    setSyncStatus("saving");
+    saveRef.current = setTimeout(() => {
+      sbSave({ subjects, records, goals, profile, dark: dk })
+        .then(() => setSyncStatus("saved"))
+        .catch(() => setSyncStatus("error"));
+    }, 1200);
+  }, [subjects, records, goals, profile, dk, loaded]);
+
+  const [tText, setTText] = useState("");
+  const [tCat, setTCat] = useState("estudos");
+  const [tOn, setTOn] = useState(false);
+  const [tP, setTP] = useState(false);
+  const [sec, setSec] = useState(0);
+  const [tStartedAt, setTStartedAt] = useState(null);
+  const [tAccum, setTAccum] = useState(0);
+  const tRef = useRef(null);
+  const [dF, setDF] = useState("month");
+  const [dD, setDD] = useState(new Date());
+  const [hC, setHC] = useState("all");
+  const [hS, setHS] = useState("all");
+  const [hSel, setHSel] = useState(new Set());
+  const [hSelMode, setHSelMode] = useState(false);
+  const [rP, setRP] = useState("month");
+  const [mt, setMt] = useState(null);
+  const [mDate, smDate] = useState("");
+  const [mSub, smSub] = useState("");
+  const [mDur, smDur] = useState("60");
+  const [mNotes, smNotes] = useState("");
+  const [mName, smName] = useState("");
+  const [mIcon, smIcon] = useState("BookOpen");
+  const [mColor, smColor] = useState("#6366f1");
+  const [mCat, smCat] = useState("estudos");
+  const [mId, smId] = useState("");
+  const [mTitle, smTitle] = useState("");
+  const [mSD, smSD] = useState("");
+  const [mED, smED] = useState("");
+  const [mHE, smHE] = useState(true);
+  const [mTH, smTH] = useState(50);
+  const [mPN, smPN] = useState("");
+  const [printMode, setPrintMode] = useState(null);
+  const [tDrop, setTDrop] = useState(false);
+  const [mRecCat, setMRecCat] = useState("all");
+  const [calM, setCalM] = useState(TODAY.getMonth());
+  const [calY, setCalY] = useState(TODAY.getFullYear());
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [rCatView, setRCatView] = useState("cat");
+
+  const flash = useCallback((m) => { setNotif(m); setTimeout(() => setNotif(null), 2200); }, []);
+
+  useEffect(() => {
+    if (tOn && !tP && tStartedAt) {
+      tRef.current = setInterval(() => {
+        setSec(tAccum + Math.floor((Date.now() - tStartedAt) / 1000));
+      }, 1000);
+    } else clearInterval(tRef.current);
+    return () => clearInterval(tRef.current);
+  }, [tOn, tP, tStartedAt, tAccum]);
+
+  const cd = dk ? "bg-white/[0.04] border border-white/[0.07]" : "bg-white/80 border border-gray-200/60 shadow-sm";
+  const tx = dk ? "text-gray-100" : "text-gray-800";
+  const mu = dk ? "text-gray-500" : "text-gray-400";
+  const ip = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 transition ${dk ? "bg-gray-800 border-white/10 text-white placeholder-gray-600" : "bg-white border-gray-200 text-gray-800 placeholder-gray-400"}`;
+
+  const gS = useCallback((id) => subjects.find((s) => s.id === id), [subjects]);
+
+  const getR = useCallback(() => {
+    const d = dD, y = d.getFullYear(), m = d.getMonth();
+    if (dF === "day") return [toK(d), toK(d)];
+    if (dF === "week") { const s = new Date(d); s.setDate(s.getDate() - ((s.getDay() + 6) % 7)); const e = new Date(s); e.setDate(e.getDate() + 6); return [toK(s), toK(e)]; }
+    if (dF === "month") return [`${y}-${pad(m+1)}-01`, `${y}-${pad(m+1)}-${pad(new Date(y, m+1, 0).getDate())}`];
+    return [`${y}-01-01`, `${y}-12-31`];
+  }, [dF, dD]);
+
+  const fR = useMemo(() => { const [s, e] = getR(); return records.filter((r) => r.date >= s && r.date <= e); }, [records, getR]);
+  const tM = useMemo(() => fR.reduce((a, r) => a + r.duration, 0), [fR]);
+  const uD = useMemo(() => [...new Set(fR.map((r) => r.date))].length, [fR]);
+  const aD = uD > 0 ? Math.round(tM / uD) : 0;
+  const streak = useMemo(() => { let c = 0, d = new Date(TODAY); while (records.some((r) => r.date === toK(d))) { c++; d.setDate(d.getDate() - 1); } return c; }, [records]);
+
+  const dashChart = useMemo(() => {
+    const mp = {}; fR.forEach((r) => { mp[r.date] = (mp[r.date] || 0) + r.duration; });
+    if (dF === "day") {
+      const bySubj = {}; fR.forEach((r) => { const s = gS(r.subjectId); if (s) bySubj[s.name] = (bySubj[s.name] || 0) + r.duration; });
+      const entries = Object.entries(bySubj);
+      return entries.length > 0 ? entries.map(([name, m]) => ({ day: name.length > 12 ? name.slice(0,12)+"…" : name, horas: +(m/60).toFixed(1) })) : [{ day: "Hoje", horas: 0 }];
+    }
+    if (dF === "week") {
+      const [s] = getR(); const start = pK(s);
+      return ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map((la, i) => { const d = new Date(start); d.setDate(d.getDate()+i); return { day: la, horas: +((mp[toK(d)]||0)/60).toFixed(1) }; });
+    }
+    if (dF === "month") {
+      const y = dD.getFullYear(), m = dD.getMonth(), dim = new Date(y, m+1, 0).getDate();
+      return Array.from({ length: dim }, (_, i) => ({ day: String(i+1), horas: +((mp[`${y}-${pad(m+1)}-${pad(i+1)}`]||0)/60).toFixed(1) }));
+    }
+    const y = dD.getFullYear(), mpM = {};
+    fR.forEach((r) => { const mk = r.date.slice(0,7); mpM[mk] = (mpM[mk]||0) + r.duration; });
+    return MO.map((name, i) => ({ day: name.slice(0,3), horas: +((mpM[`${y}-${pad(i+1)}`]||0)/60).toFixed(1) }));
+  }, [fR, dF, dD, gS, getR]);
+  const dashChartLabel = { day:"Detalhamento do Dia", week:"Evolução Semanal", month:`Evolução ${MO[dD.getMonth()]}`, year:`Evolução ${dD.getFullYear()}` }[dF];
+
+  const pD = useMemo(() => {
+    const mp = {}; fR.forEach((r) => { mp[r.subjectId] = (mp[r.subjectId]||0) + r.duration; });
+    return Object.entries(mp).map(([id, m]) => { const s = gS(id); return s ? { name: s.name, value: m, color: s.color } : null; }).filter(Boolean).sort((a,b)=>b.value-a.value).slice(0,6);
+  }, [fR, gS]);
+
+  const gPct = useCallback((g) => {
+    const ids = subjects.filter((s) => s.category === g.category).map((s) => s.id);
+    const mn = records.filter((r) => ids.includes(r.subjectId) && r.date >= g.startDate && r.date <= (g.endDate || toK(TODAY))).reduce((a,r)=>a+r.duration,0);
+    return g.targetHours > 0 ? Math.min(100, Math.round(mn/60/g.targetHours*100)) : 0;
+  }, [subjects, records]);
+  const gDL = (g) => { if (!g.endDate) return null; return Math.max(0, Math.ceil((pK(g.endDate)-TODAY)/864e5)); };
+
+  const addRec = (sId, date, dur, notes) => { setRecords((p) => [...p, { id: uid(), subjectId: sId, date, duration: parseInt(dur)||0, notes: notes||"" }]); flash("Registro adicionado!"); };
+  const delRec = (id) => { setRecords((p) => p.filter((r) => r.id !== id)); flash("Removido"); };
+  const delSub = (id) => { setSubjects((p) => p.filter((s) => s.id !== id)); setRecords((p) => p.filter((r) => r.subjectId !== id)); flash("Conteúdo removido"); };
+  const delGoal = (id) => { setGoals((p) => p.filter((g) => g.id !== id)); flash("Meta removida"); };
+
+  const resetAll = async () => {
+    if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
+    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]);
+    setSec(0); setTOn(false); setTP(false); setTText(""); setTAccum(0); setTStartedAt(null);
+    setConfirmReset(false); flash("Tudo resetado!");
+  };
+
+  const startT = () => {
+    if (!tText.trim()) return;
+    const found = subjects.find((sub) => sub.name.toLowerCase() === tText.trim().toLowerCase());
+    if (!found) {
+      const color = COLS[Math.floor(Math.random()*COLS.length)];
+      const icons = ["BookOpen","Code","Pen","Target","Beaker","Globe"];
+      setSubjects((p) => [...p, { id: uid(), name: tText.trim(), icon: icons[Math.floor(Math.random()*icons.length)], color, category: tCat }]);
+      flash(`"${tText.trim()}" criado!`);
+    } else setTCat(found.category);
+    setTOn(true); setTP(false); setTAccum(0); setTStartedAt(Date.now()); setSec(0);
+  };
+  const pauseT = () => { setTAccum((a) => a + (tStartedAt ? Math.floor((Date.now()-tStartedAt)/1000) : 0)); setTStartedAt(null); setTP(true); };
+  const contT = () => { setTStartedAt(Date.now()); setTP(false); };
+  const stopT = () => {
+    const mins = Math.max(1, Math.round(sec/60));
+    if (sec > 0) {
+      const s = subjects.find((sub) => sub.name.toLowerCase() === tText.trim().toLowerCase());
+      if (s) { setRecords((p) => [...p, { id: uid(), subjectId: s.id, date: toK(TODAY), duration: mins, notes: "" }]); flash(`Sessão de ${fmtDur(mins)} salva!`); }
+    }
+    setTOn(false); setTP(false); setSec(0); setTAccum(0); setTStartedAt(null);
+  };
+
+  const stepD = (dir) => { const d = new Date(dD); if (dF==="day") d.setDate(d.getDate()+dir); else if (dF==="week") d.setDate(d.getDate()+dir*7); else if (dF==="month") d.setMonth(d.getMonth()+dir); else d.setFullYear(d.getFullYear()+dir); setDD(d); };
+  const fLbl = () => { const d = dD; if (dF==="day") return `${pad(d.getDate())} ${MO[d.getMonth()]} ${d.getFullYear()}`; if (dF==="week") { const s=new Date(d); s.setDate(s.getDate()-((s.getDay()+6)%7)); const e=new Date(s); e.setDate(e.getDate()+6); return `${pad(s.getDate())}/${pad(s.getMonth()+1)} – ${pad(e.getDate())}/${pad(e.getMonth()+1)}`; } if (dF==="month") return `${MO[d.getMonth()]} ${d.getFullYear()}`; return `${d.getFullYear()}`; };
+
+  const openRec = (date) => { smDate(date||toK(TODAY)); smSub(subjects[0]?.id||""); smDur("60"); smNotes(""); setMRecCat("all"); setMt("addRec"); };
+  const openAddSub = () => { smName(""); smIcon("BookOpen"); smColor("#6366f1"); smCat("estudos"); setMt("addSub"); };
+  const openEditSub = (s) => { smId(s.id); smName(s.name); smIcon(s.icon); smColor(s.color); smCat(s.category); setMt("editSub"); };
+  const openAddGoal = () => { smTitle(""); smSD(toK(TODAY)); smED(""); smHE(true); smTH(50); smCat("estudos"); setMt("addGoal"); };
+  const openEditGoal = (g) => { smId(g.id); smTitle(g.title); smSD(g.startDate); smED(g.endDate||""); smHE(!!g.endDate); smTH(g.targetHours); smCat(g.category); setMt("editGoal"); };
+  const openProfile = () => { smPN(profile.name); setMt("profile"); };
+  const cl = () => setMt(null);
+
+  const hData = useMemo(() => [...records].sort((a,b)=>b.date.localeCompare(a.date)||b.duration-a.duration).filter((r) => {
+    const s = gS(r.subjectId); if (!s) return false;
+    if (hC !== "all" && s.category !== hC) return false;
+    if (hS !== "all" && r.subjectId !== hS) return false;
+    return true;
+  }), [records, hC, hS, gS]);
+
+  const rRecs = useMemo(() => {
+    const n = TODAY;
+    if (rP==="day") return records.filter((r)=>r.date===toK(n));
+    if (rP==="week") { const s=new Date(n); s.setDate(s.getDate()-((s.getDay()+6)%7)); const e=new Date(s); e.setDate(e.getDate()+6); return records.filter((r)=>r.date>=toK(s)&&r.date<=toK(e)); }
+    if (rP==="month") { const pf=`${n.getFullYear()}-${pad(n.getMonth()+1)}`; return records.filter((r)=>r.date.startsWith(pf)); }
+    return records.filter((r)=>r.date.startsWith(`${n.getFullYear()}`));
+  }, [records, rP]);
+  const rT = useMemo(()=>rRecs.reduce((a,r)=>a+r.duration,0),[rRecs]);
+  const rDy = useMemo(()=>[...new Set(rRecs.map((r)=>r.date))].length,[rRecs]);
+  const rTrend = useMemo(() => {
+    const mp = {}; rRecs.forEach((r)=>{mp[r.date]=(mp[r.date]||0)+r.duration;});
+    if (rP==="day") { const bySubj={}; rRecs.forEach((r)=>{const s=gS(r.subjectId); if(s) bySubj[s.name]=(bySubj[s.name]||0)+r.duration;}); const e=Object.entries(bySubj); return e.length>0?e.map(([name,m])=>({date:name.length>12?name.slice(0,12)+"…":name,horas:+(m/60).toFixed(1)})):[{date:"Hoje",horas:0}]; }
+    if (rP==="week") { const now=TODAY; const start=new Date(now); start.setDate(start.getDate()-((start.getDay()+6)%7)); return ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map((label,i)=>{const d=new Date(start); d.setDate(d.getDate()+i); return {date:label,horas:+((mp[toK(d)]||0)/60).toFixed(1)};}); }
+    if (rP==="month") { const y=TODAY.getFullYear(),m=TODAY.getMonth(),dim=new Date(y,m+1,0).getDate(); return Array.from({length:dim},(_,i)=>({date:String(i+1),horas:+((mp[`${y}-${pad(m+1)}-${pad(i+1)}`]||0)/60).toFixed(1)})); }
+    const y=TODAY.getFullYear(),mpM={}; rRecs.forEach((r)=>{const mk=r.date.slice(0,7); mpM[mk]=(mpM[mk]||0)+r.duration;}); return MO.map((name,i)=>({date:name.slice(0,3),horas:+((mpM[`${y}-${pad(i+1)}`]||0)/60).toFixed(1)}));
+  }, [rRecs, rP, gS]);
+  const rTrendLabel = {day:"Detalhamento do Dia",week:"Tendência Semanal (Seg–Dom)",month:`Tendência ${MO[TODAY.getMonth()]}`,year:`Tendência ${TODAY.getFullYear()}`}[rP];
+  const rByCat = useMemo(()=>CATS.map((cat)=>{const ids=subjects.filter((s)=>s.category===cat.id).map((s)=>s.id); const mins=rRecs.filter((r)=>ids.includes(r.subjectId)).reduce((a,r)=>a+r.duration,0); return {name:cat.label,horas:+(mins/60).toFixed(1),color:cat.color};}).filter((c)=>c.horas>0),[rRecs,subjects]);
+  const rByContent = useMemo(()=>{const mp={}; rRecs.forEach((r)=>{mp[r.subjectId]=(mp[r.subjectId]||0)+r.duration;}); return Object.entries(mp).map(([id,mins])=>{const s=gS(id); return s?{name:s.name.length>20?s.name.slice(0,20)+"…":s.name,horas:+(mins/60).toFixed(1),color:s.color}:null;}).filter(Boolean).sort((a,b)=>b.horas-a.horas).slice(0,8);}, [rRecs,gS]);
+  const rTop = useMemo(()=>{const mp={}; rRecs.forEach((r)=>{mp[r.subjectId]=(mp[r.subjectId]||0)+r.duration;}); return Object.entries(mp).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([id,m])=>{const s=gS(id); return s?{...s,mins:m,pct:rT>0?Math.round(m/rT*100):0}:null;}).filter(Boolean);}, [rRecs,rT,gS]);
+
+  const cDIM = new Date(calY, calM+1, 0).getDate(), cFD = new Date(calY, calM, 1).getDay();
+  const nav = (p) => { setPg(p); setSb(false); };
+  const menus = [{n:"Dashboard",i:LayoutDashboard},{n:"Conteúdos",i:BookOpen},{n:"Histórico",i:Clock},{n:"Relatórios",i:BarChart3},{n:"Configurações",i:Settings}];
+
+  const BtnAct = ({ children, color, onClick, disabled }) => (
+    <button onClick={onClick} disabled={disabled} className={`inline-flex items-center gap-1 px-3.5 py-2 rounded-lg ${color} text-white text-xs font-bold shadow-md transition hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed`}>{children}</button>
+  );
+
+  /* ── Sync badge ── */
+  const SyncBadge = () => {
+    if (syncStatus === "saving") return <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 text-amber-400 text-[10px] font-bold"><Database size={11} className="animate-pulse" />Salvando...</div>;
+    if (syncStatus === "saved") return <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px] font-bold"><Wifi size={11} />Salvo</div>;
+    if (syncStatus === "error") return <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/10 text-red-400 text-[10px] font-bold"><WifiOff size={11} />Offline</div>;
+    return null;
+  };
+
+  if (!loaded) return (
+    <div className={`min-h-screen flex items-center justify-center ${dk ? "bg-gray-950" : "bg-gray-50"}`} style={{fontFamily:"'Outfit',sans-serif"}}>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg animate-pulse"><BookOpen size={22} className="text-white" /></div>
+        <p className="text-sm font-semibold text-gray-500">Carregando do Supabase...</p>
+        <div className="flex items-center gap-1.5 text-xs text-gray-400"><Database size={13} />Buscando seus dados...</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={`${dk?"bg-gray-950 text-gray-100":"bg-gray-50 text-gray-800"} min-h-screen flex transition-colors duration-500`} style={{fontFamily:"'Outfit',sans-serif"}}>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+      {notif && <div className="fixed top-4 right-4 z-[100]"><div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold shadow-2xl text-xs animate-bounce"><Check size={14}/>{notif}</div></div>}
+      {sb && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={()=>setSb(false)}/>}
+
+      {/* SIDEBAR */}
+      <aside className={`fixed lg:static z-40 h-full w-56 flex flex-col transition-transform duration-300 ${sb?"translate-x-0":"-translate-x-full lg:translate-x-0"} ${dk?"bg-gray-900 border-r border-white/5":"bg-white border-r border-gray-200/70"} p-4 flex-shrink-0 overflow-y-auto`}>
+        <div className="flex items-center gap-2.5 mb-7 px-1">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30"><BookOpen size={15} className="text-white"/></div>
+          <div><p className={`text-sm font-extrabold tracking-tight ${tx}`}>EstudoFlow</p><p className={`text-[9px] ${mu}`}>Controle Pessoal</p></div>
+        </div>
+        <nav className="flex flex-col gap-0.5 flex-1">
+          {menus.map((m)=>(
+            <button key={m.n} onClick={()=>nav(m.n)} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${pg===m.n?"bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20":dk?"text-gray-400 hover:text-white hover:bg-white/5":"text-gray-500 hover:text-gray-800 hover:bg-gray-100"}`}>
+              <m.i size={16}/>{m.n}
+            </button>
+          ))}
+        </nav>
+        <div className="mt-auto space-y-2 pt-3 border-t border-gray-200/50">
+          {goals.slice(0,2).map((g)=>{
+            const pct=gPct(g),days=gDL(g);
+            return (
+              <div key={g.id} className={`p-2.5 rounded-lg ${dk?"bg-white/5":"bg-indigo-50/70"}`}>
+                <div className="flex items-center justify-between"><p className={`text-[11px] font-bold ${dk?"text-indigo-300":"text-indigo-600"} truncate`}>{g.title}</p>{days!==null&&<span className={`text-[9px] ${mu} ml-1 flex-shrink-0`}>{days}d</span>}</div>
+                {g.endDate&&<p className={`text-[9px] ${mu}`}>{g.endDate.split("-").reverse().join("/")}</p>}
+                <div className={`w-full h-1 rounded-full mt-1.5 ${dk?"bg-white/10":"bg-indigo-100"}`}><div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all" style={{width:`${pct}%`}}/></div>
+              </div>
+            );
+          })}
+        </div>
+      </aside>
+
+      {/* MAIN */}
+      <main className="flex-1 flex flex-col min-h-screen min-w-0">
+        <header className={`flex items-center justify-between px-4 md:px-5 py-2.5 ${dk?"border-b border-white/5":"border-b border-gray-200/60"} flex-shrink-0`}>
+          <div className="flex items-center gap-2">
+            <button onClick={()=>setSb(true)} className={`p-1.5 rounded-lg lg:hidden ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-gray-100 text-gray-500"}`}><Menu size={18}/></button>
+            <div>
+              <p className={`text-base md:text-lg font-bold ${tx}`}>{pg}</p>
+              <p className={`text-[10px] ${mu}`}>{TODAY.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <SyncBadge/>
+            <button onClick={()=>openRec()} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[11px] font-bold shadow-md"><Plus size={13}/><span className="hidden sm:inline">Registro</span></button>
+            <button onClick={resetAll} title="Resetar tudo" className={`p-1.5 rounded-lg transition ${dk?"hover:bg-white/10 text-gray-500":"hover:bg-gray-100 text-gray-400"}`}><RotateCcw size={15}/></button>
+            <div className={`flex items-center gap-1.5 pl-2 ml-0.5 ${dk?"border-l border-white/10":"border-l border-gray-200"}`}>
+              <button onClick={openProfile} className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-sm hover:scale-105 transition-transform">{profile.emoji}</button>
+              <span className={`text-xs font-semibold ${tx} hidden md:block`}>{profile.name}</span>
+              <button onClick={()=>setDk(!dk)} className={`p-1.5 rounded-lg transition ${dk?"bg-yellow-500/20 text-yellow-400":"bg-indigo-50 text-indigo-500"}`}>{dk?<Sun size={15}/>:<Moon size={15}/>}</button>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-6xl mx-auto p-4 md:p-5 space-y-4">
+
+            {/* DASHBOARD */}
+            {pg==="Dashboard"&&(<>
+              <div className={`${cd} rounded-xl p-2.5 flex flex-wrap items-center gap-1.5`}>
+                <Filter size={13} className={mu}/>
+                {[{k:"day",l:"Dia"},{k:"week",l:"Semana"},{k:"month",l:"Mês"},{k:"year",l:"Ano"}].map((f)=>(
+                  <button key={f.k} onClick={()=>{setDF(f.k);setDD(new Date());}} className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${dF===f.k?"bg-indigo-500 text-white shadow":mu}`}>{f.l}</button>
+                ))}
+                <div className="flex items-center gap-1 ml-auto">
+                  <button onClick={()=>stepD(-1)} className={`p-0.5 rounded ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronLeft size={15}/></button>
+                  <span className={`text-[11px] font-semibold ${tx} min-w-[110px] text-center`}>{fLbl()}</span>
+                  <button onClick={()=>stepD(1)} className={`p-0.5 rounded ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronRight size={15}/></button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                <div className={`lg:col-span-3 ${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Adicionar Estudo Atual</p>
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 space-y-3">
+                      <div className="relative">
+                        <input value={tText} onChange={(e)=>{setTText(e.target.value);setTDrop(true);}} onFocus={()=>setTDrop(true)} placeholder="O que você está estudando hoje?" className={ip}/>
+                        {tDrop&&(
+                          <div className={`absolute left-0 right-0 top-full mt-1 rounded-xl border shadow-xl z-20 max-h-48 overflow-y-auto ${dk?"bg-gray-800 border-white/10":"bg-white border-gray-200"}`}>
+                            {subjects.filter((s)=>!tText||s.name.toLowerCase().includes(tText.toLowerCase())).map((s)=>{
+                              const Ic=gI(s.icon);
+                              return <button key={s.id} onClick={()=>{setTText(s.name);setTCat(s.category);setTDrop(false);}} className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition ${dk?"hover:bg-white/10":"hover:bg-indigo-50"}`}>
+                                <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{background:s.color+"18"}}><Ic size={12} style={{color:s.color}}/></div>
+                                <span className={`text-xs font-semibold ${tx} truncate`}>{s.name}</span>
+                                <span className={`text-[9px] ${mu} ml-auto flex-shrink-0`}>{CATS.find(c=>c.id===s.category)?.label}</span>
+                              </button>;
+                            })}
+                          </div>
+                        )}
+                        {tDrop&&<div className="fixed inset-0 z-10" onClick={()=>setTDrop(false)}/>}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <BtnAct color="bg-emerald-500" onClick={startT} disabled={tOn&&!tP}><Play size={13}/>Iniciar</BtnAct>
+                        <BtnAct color="bg-amber-500" onClick={pauseT} disabled={!tOn||tP}><Pause size={13}/>Pausar</BtnAct>
+                        <BtnAct color="bg-blue-500" onClick={contT} disabled={!tP}><SkipForward size={13}/>Continuar</BtnAct>
+                        <BtnAct color="bg-red-500" onClick={stopT} disabled={!tOn}><Square size={11}/>Parar</BtnAct>
+                        <select value={tCat} onChange={(e)=>setTCat(e.target.value)} className={`${ip} w-auto py-2 text-xs`}>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
+                      </div>
+                    </div>
+                    <div className="text-center flex-shrink-0 flex flex-col items-center justify-center md:min-w-[180px]">
+                      <p className={`text-4xl font-extrabold tracking-tight ${tx}`} style={{fontVariantNumeric:"tabular-nums"}}>{fmtT(sec)}</p>
+                      <p className={`text-[10px] mt-0.5 ${mu}`}>{tOn?(tP?"⏸ Pausado":"● Estudando"):"Pronto para começar"}</p>
+                      {tOn&&tText&&<p className={`text-[10px] font-semibold mt-0.5 ${dk?"text-indigo-400":"text-indigo-600"}`}>{tText.length>30?tText.slice(0,30)+"…":tText}</p>}
+                    </div>
+                  </div>
+                </div>
+                <div className={`lg:col-span-1 ${cd} rounded-xl p-4 flex flex-col items-center justify-center`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Meta Principal</p>
+                  {goals.length>0?(<>
+                    <div className="relative"><Ring pct={gPct(goals[0])} sz={100} sw={8} dk={dk}/><div className="absolute inset-0 flex items-center justify-center"><span className={`text-lg font-extrabold ${tx}`}>{gPct(goals[0])}%</span></div></div>
+                    <p className={`text-[11px] mt-1.5 font-bold ${tx} text-center`}>{goals[0].title}</p>
+                    {gDL(goals[0])!==null&&<p className={`text-[10px] ${mu}`}>{gDL(goals[0])} dias restantes</p>}
+                  </>):<p className={`text-xs ${mu}`}>Sem metas</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  {l:"Total Período",v:fmtDur(tM),i:Clock,g:"from-indigo-500 to-purple-500"},
+                  {l:"Média Diária",v:fmtDur(aD),i:TrendingUp,g:"from-emerald-500 to-teal-500"},
+                  {l:"Dias Ativos",v:String(uD),i:Calendar,g:"from-blue-500 to-cyan-500"},
+                  {l:"Sequência",v:`${streak} dias`,i:Flame,g:"from-amber-500 to-orange-500"},
+                ].map((s,i)=>(
+                  <div key={i} className={`${cd} rounded-xl p-3 flex items-center gap-2.5`}>
+                    <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${s.g} flex items-center justify-center flex-shrink-0 shadow`}><s.i size={16} className="text-white"/></div>
+                    <div className="min-w-0"><p className={`text-[10px] ${mu}`}>{s.l}</p><p className={`text-sm font-extrabold ${tx}`}>{s.v}</p></div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className={`md:col-span-2 ${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>{dashChartLabel}</p>
+                  <ResponsiveContainer width="100%" height={170}>
+                    {dF==="month"||dF==="year"?(
+                      <AreaChart data={dashChart}><defs><linearGradient id="dg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={dk?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.05)"} vertical={false}/><XAxis dataKey="day" tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false}/><YAxis tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false} unit="h" width={30}/><Tooltip content={<CTip dark={dk}/>} cursor={false}/><Area type="monotone" dataKey="horas" stroke="#6366f1" strokeWidth={2} fill="url(#dg)"/></AreaChart>
+                    ):(
+                      <BarChart data={dashChart} barCategoryGap="20%"><CartesianGrid strokeDasharray="3 3" stroke={dk?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.05)"} vertical={false}/><XAxis dataKey="day" tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false}/><YAxis tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false} unit="h" width={30}/><Tooltip content={<CTip dark={dk}/>} cursor={false}/><Bar dataKey="horas" radius={[6,6,2,2]} fill="#6366f1"/></BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+                <div className={`md:col-span-2 ${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Distribuição por Conteúdo</p>
+                  {pD.length>0?(<>
+                    <ResponsiveContainer width="100%" height={140}><PieChart><Pie data={pD} cx="50%" cy="50%" innerRadius={35} outerRadius={58} paddingAngle={3} dataKey="value" stroke="none">{pD.map((e,i)=><Cell key={i} fill={e.color}/>)}</Pie><Tooltip content={<CTip dark={dk}/>} cursor={false}/></PieChart></ResponsiveContainer>
+                    <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1">{pD.map((s)=><div key={s.name} className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{background:s.color}}/><span className={`text-[9px] ${mu}`}>{s.name}</span></div>)}</div>
+                  </>):<p className={`text-xs ${mu} text-center mt-8`}>Sem dados no período</p>}
+                </div>
+                <div className={`md:col-span-1 ${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Histórico Recente</p>
+                  <div className="space-y-1.5">
+                    {records.slice(-4).reverse().map((r)=>{const s=gS(r.subjectId); if(!s) return null; const Ic=gI(s.icon); return(
+                      <div key={r.id} className={`flex items-center gap-2 p-2 rounded-lg ${dk?"bg-white/[0.03]":"bg-gray-50"}`}>
+                        <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{background:s.color+"15"}}><Ic size={12} style={{color:s.color}}/></div>
+                        <div className="min-w-0 flex-1"><p className={`text-[11px] font-bold ${tx} truncate`}>{s.name}</p><p className={`text-[9px] ${mu}`}>{fmtDur(r.duration)} · {r.date.split("-").reverse().join("/")}</p></div>
+                      </div>
+                    );})}
+                    {records.length===0&&<p className={`text-[10px] ${mu} text-center py-4`}>Sem registros</p>}
+                  </div>
+                </div>
+              </div>
+
+              <div className={`${cd} rounded-xl p-4`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest`}>Calendário de Estudos</p>
+                  <div className="flex items-center gap-2">
+                    <button onClick={()=>{if(calM===0){setCalM(11);setCalY(calY-1);}else setCalM(calM-1);}} className={`p-1 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronLeft size={14}/></button>
+                    <select value={calM} onChange={(e)=>setCalM(Number(e.target.value))} className={`${ip} w-auto py-1 px-2 text-xs`}>{MO.map((m,i)=><option key={i} value={i}>{m}</option>)}</select>
+                    <select value={calY} onChange={(e)=>setCalY(Number(e.target.value))} className={`${ip} w-auto py-1 px-2 text-xs`}>{[2024,2025,2026,2027,2028,2029,2030].map((y)=><option key={y} value={y}>{y}</option>)}</select>
+                    <button onClick={()=>{if(calM===11){setCalM(0);setCalY(calY+1);}else setCalM(calM+1);}} className={`p-1 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronRight size={14}/></button>
+                    <button onClick={()=>{setCalM(TODAY.getMonth());setCalY(TODAY.getFullYear());}} className={`px-2 py-1 rounded-md text-[10px] font-bold ${dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}>Hoje</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {["D","S","T","Q","Q","S","S"].map((d,i)=><div key={i} className={`text-center text-[9px] font-bold ${mu} py-0.5`}>{d}</div>)}
+                  {Array.from({length:cFD}).map((_,i)=><div key={`e${i}`}/>)}
+                  {Array.from({length:cDIM},(_,i)=>{
+                    const dn=i+1,dk2=`${calY}-${pad(calM+1)}-${pad(dn)}`;
+                    const dayRecs=records.filter((r)=>r.date===dk2);
+                    const mn=dayRecs.reduce((a,r)=>a+r.duration,0);
+                    const hr=mn/60,isT=dk2===toK(TODAY);
+                    let bg=dk?"bg-white/[0.03] text-gray-600":"bg-gray-50 text-gray-400";
+                    if(mn>0) bg=hr>5?"bg-indigo-500 text-white":hr>3?"bg-indigo-400 text-white":hr>1?"bg-indigo-300 text-white":"bg-indigo-200 text-indigo-700";
+                    const tip=mn>0?dayRecs.map((r)=>{const s=gS(r.subjectId); return s?`${s.name}: ${fmtDur(r.duration)}`:""}).filter(Boolean).join("\n")+`\nTotal: ${hr.toFixed(1)}h`:"Clique para adicionar";
+                    return <button key={dn} onClick={()=>openRec(dk2)} className={`flex items-center justify-center h-8 rounded-lg text-[11px] font-semibold transition hover:scale-105 ${bg} ${isT?"ring-2 ring-indigo-500 ring-offset-1 "+(dk?"ring-offset-gray-950":"ring-offset-gray-50"):""}`} title={tip}>{dn}</button>;
+                  })}
+                </div>
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className={`text-[9px] ${mu}`}>Menos</span>
+                  <div className={`w-2.5 h-2.5 rounded-sm ${dk?"bg-white/[0.03]":"bg-gray-100"}`}/>
+                  <div className="w-2.5 h-2.5 rounded-sm bg-indigo-200"/><div className="w-2.5 h-2.5 rounded-sm bg-indigo-300"/><div className="w-2.5 h-2.5 rounded-sm bg-indigo-400"/><div className="w-2.5 h-2.5 rounded-sm bg-indigo-500"/>
+                  <span className={`text-[9px] ${mu}`}>Mais</span>
+                </div>
+              </div>
+            </>)}
+
+            {/* CONTEÚDOS */}
+            {pg==="Conteúdos"&&(
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className={`text-xs ${mu}`}>{subjects.length} conteúdos</p>
+                  <button onClick={openAddSub} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow-md"><Plus size={14}/>Novo</button>
+                </div>
+                {CATS.map((cat)=>{
+                  const sbs=subjects.filter((s)=>s.category===cat.id);
+                  if(!sbs.length) return null;
+                  return <div key={cat.id}>
+                    <div className="flex items-center gap-1.5 mb-2"><cat.icon size={14} style={{color:cat.color}}/><span className={`text-[11px] font-bold ${tx} uppercase tracking-wider`}>{cat.label}</span><span className={`text-[10px] ${mu}`}>({sbs.length})</span></div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                      {sbs.map((sub)=>{const Ic=gI(sub.icon); const tH=(records.filter((r)=>r.subjectId===sub.id).reduce((a,r)=>a+r.duration,0)/60).toFixed(1); return(
+                        <div key={sub.id} className={`${cd} rounded-xl p-3 flex items-center gap-3 group`}>
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:sub.color+"15"}}><Ic size={16} style={{color:sub.color}}/></div>
+                          <div className="flex-1 min-w-0"><p className={`text-[13px] font-bold ${tx} truncate`}>{sub.name}</p><p className={`text-[10px] ${mu}`}>{tH}h registradas</p></div>
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
+                            <button onClick={()=>openEditSub(sub)} className={`p-1.5 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
+                            <button onClick={()=>delSub(sub.id)} className="p-1.5 rounded-md hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
+                          </div>
+                        </div>
+                      );})}
+                    </div>
+                  </div>;
+                })}
+              </div>
+            )}
+
+            {/* HISTÓRICO */}
+            {pg==="Histórico"&&(
+              <div className="space-y-3">
+                <div className={`${cd} rounded-xl p-2.5 flex flex-wrap gap-2 items-center`}>
+                  <Filter size={13} className={mu}/>
+                  <select value={hC} onChange={(e)=>{setHC(e.target.value);setHS("all");}} className={`${ip} w-auto text-xs py-2`}><option value="all">Todas categorias</option>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
+                  <select value={hS} onChange={(e)=>setHS(e.target.value)} className={`${ip} w-auto text-xs py-2`}><option value="all">Todos os conteúdos</option>{subjects.filter((s)=>hC==="all"||s.category===hC).map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                  <span className={`text-[10px] ${mu} ml-auto`}>{hData.length} registros · {(hData.reduce((a,r)=>a+r.duration,0)/60).toFixed(1)}h</span>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <button onClick={()=>{setHSelMode(!hSelMode);setHSel(new Set());}} className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition ${hSelMode?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><Edit3 size={12}/>{hSelMode?"Cancelar":"Selecionar"}</button>
+                  {hSelMode&&hSel.size>0&&<button onClick={()=>{setRecords(p=>p.filter(r=>!hSel.has(r.id)));flash(`${hSel.size} removidos`);setHSel(new Set());setHSelMode(false);}} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-500 text-white text-[11px] font-bold shadow"><Trash2 size={12}/>Deletar {hSel.size}</button>}
+                </div>
+                {hData.slice(0,50).map((r)=>{const s=gS(r.subjectId); if(!s) return null; const Ic=gI(s.icon); const sel=hSel.has(r.id); return(
+                  <div key={r.id} onClick={()=>{if(hSelMode){const n=new Set(hSel); if(n.has(r.id))n.delete(r.id);else n.add(r.id); setHSel(n);}}} className={`${cd} rounded-xl p-3 flex items-center gap-3 group ${hSelMode?"cursor-pointer":""} ${sel?"ring-2 ring-indigo-500":""}`}>
+                    {hSelMode&&<div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${sel?"bg-indigo-500 border-indigo-500":dk?"border-white/20":"border-gray-300"}`}>{sel&&<Check size={12} className="text-white"/>}</div>}
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:s.color+"15"}}><Ic size={14} style={{color:s.color}}/></div>
+                    <div className="flex-1 min-w-0"><p className={`text-[13px] font-semibold ${tx} truncate`}>{s.name}</p><p className={`text-[9px] ${mu}`}>{r.date.split("-").reverse().join("/")} {r.notes&&`· ${r.notes}`}</p></div>
+                    <p className={`text-xs font-bold ${tx} flex-shrink-0`}>{fmtDur(r.duration)}</p>
+                    {!hSelMode&&<button onClick={()=>delRec(r.id)} className="p-1 rounded-md hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition flex-shrink-0"><Trash2 size={12} className="text-red-400"/></button>}
+                  </div>
+                );})}
+                {hData.length===0&&<p className={`text-center py-10 ${mu} text-sm`}>Nenhum registro</p>}
+              </div>
+            )}
+
+            {/* RELATÓRIOS */}
+            {pg==="Relatórios"&&(
+              <div className="space-y-4">
+                <div className={`${cd} rounded-xl p-2.5 flex flex-wrap gap-2 items-center`}>
+                  <BarChart3 size={13} className={mu}/>
+                  {[{k:"day",l:"Diário"},{k:"week",l:"Semanal"},{k:"month",l:"Mensal"},{k:"year",l:"Anual"}].map((p)=>(
+                    <button key={p.k} onClick={()=>setRP(p.k)} className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${rP===p.k?"bg-indigo-500 text-white shadow":mu}`}>{p.l}</button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[{l:"Total",v:fmtDur(rT),i:Clock,g:"from-indigo-500 to-purple-500"},{l:"Sessões",v:String(rRecs.length),i:FileText,g:"from-blue-500 to-cyan-500"},{l:"Dias Ativos",v:String(rDy),i:Calendar,g:"from-emerald-500 to-teal-500"},{l:"Média/Dia",v:rDy>0?fmtDur(Math.round(rT/rDy)):"—",i:TrendingUp,g:"from-amber-500 to-orange-500"}].map((s,i)=>(
+                    <div key={i} className={`${cd} rounded-xl p-3 flex items-center gap-2.5`}>
+                      <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${s.g} flex items-center justify-center flex-shrink-0 shadow`}><s.i size={16} className="text-white"/></div>
+                      <div className="min-w-0"><p className={`text-[10px] ${mu}`}>{s.l}</p><p className={`text-sm font-extrabold ${tx}`}>{s.v}</p></div>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className={`${cd} rounded-xl p-4`}>
+                    <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>{rTrendLabel}</p>
+                    <ResponsiveContainer width="100%" height={180}>
+                      {rP==="day"?(
+                        <BarChart data={rTrend} barCategoryGap="20%"><CartesianGrid strokeDasharray="3 3" stroke={dk?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.05)"} vertical={false}/><XAxis dataKey="date" tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false}/><YAxis tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false} unit="h" width={30}/><Tooltip content={<CTip dark={dk}/>} cursor={false}/><Bar dataKey="horas" radius={[6,6,2,2]} fill="#6366f1"/></BarChart>
+                      ):(
+                        <AreaChart data={rTrend}><defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={dk?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.05)"} vertical={false}/><XAxis dataKey="date" tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false}/><YAxis tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false} unit="h" width={30}/><Tooltip content={<CTip dark={dk}/>} cursor={false}/><Area type="monotone" dataKey="horas" stroke="#6366f1" strokeWidth={2} fill="url(#ag)"/></AreaChart>
+                      )}
+                    </ResponsiveContainer>
+                  </div>
+                  <div className={`${cd} rounded-xl p-4`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest`}>{rCatView==="cat"?"Por Categoria":"Por Conteúdo"}</p>
+                      <div className="flex ml-auto">
+                        <button onClick={()=>setRCatView("cat")} className={`px-2 py-0.5 rounded-l-md text-[9px] font-bold transition ${rCatView==="cat"?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-500":"bg-gray-100 text-gray-400"}`}>Categoria</button>
+                        <button onClick={()=>setRCatView("content")} className={`px-2 py-0.5 rounded-r-md text-[9px] font-bold transition ${rCatView==="content"?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-500":"bg-gray-100 text-gray-400"}`}>Conteúdo</button>
+                      </div>
+                    </div>
+                    {rCatView==="cat"?(
+                      rByCat.length>0?<ResponsiveContainer width="100%" height={180}><BarChart data={rByCat} layout="vertical" barSize={16}><CartesianGrid strokeDasharray="3 3" stroke={dk?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.05)"} horizontal={false}/><XAxis type="number" tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false} unit="h"/><YAxis type="category" dataKey="name" tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:10}} axisLine={false} tickLine={false} width={100}/><Tooltip content={<CTip dark={dk}/>} cursor={false}/><Bar dataKey="horas" radius={[0,6,6,0]}>{rByCat.map((e,i)=><Cell key={i} fill={e.color}/>)}</Bar></BarChart></ResponsiveContainer>:<p className={`text-xs ${mu} text-center mt-8`}>Sem dados</p>
+                    ):(
+                      rByContent.length>0?<ResponsiveContainer width="100%" height={Math.max(180,rByContent.length*30)}><BarChart data={rByContent} layout="vertical" barSize={14}><CartesianGrid strokeDasharray="3 3" stroke={dk?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.05)"} horizontal={false}/><XAxis type="number" tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false} unit="h"/><YAxis type="category" dataKey="name" tick={{fill:dk?"#6b7280":"#9ca3af",fontSize:9}} axisLine={false} tickLine={false} width={120}/><Tooltip content={<CTip dark={dk}/>} cursor={false}/><Bar dataKey="horas" radius={[0,6,6,0]}>{rByContent.map((e,i)=><Cell key={i} fill={e.color}/>)}</Bar></BarChart></ResponsiveContainer>:<p className={`text-xs ${mu} text-center mt-8`}>Sem dados</p>
+                    )}
+                  </div>
+                </div>
+                <div className={`${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Top Conteúdos</p>
+                  <div className="space-y-2">
+                    {rTop.map((s)=>{const Ic=gI(s.icon); return(
+                      <div key={s.id} className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{background:s.color+"15"}}><Ic size={12} style={{color:s.color}}/></div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-0.5"><span className={`text-[11px] font-bold ${tx} truncate`}>{s.name}</span><span className={`text-[9px] ${mu} flex-shrink-0 ml-2`}>{fmtDur(s.mins)} ({s.pct}%)</span></div>
+                          <div className={`w-full h-1 rounded-full ${dk?"bg-white/10":"bg-gray-200"}`}><div className="h-full rounded-full transition-all" style={{width:`${s.pct}%`,background:s.color}}/></div>
+                        </div>
+                      </div>
+                    );})}
+                    {rTop.length===0&&<p className={`text-xs ${mu} text-center py-4`}>Sem dados</p>}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={()=>setPrintMode("report")} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Printer size={14}/>Gerar Relatório PDF</button>
+                  <button onClick={()=>setPrintMode("cert")} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow-md"><Award size={14}/>Gerar Certificado</button>
+                </div>
+              </div>
+            )}
+
+            {/* CONFIGURAÇÕES */}
+            {pg==="Configurações"&&(
+              <div className="space-y-4 max-w-2xl">
+                <div className={`${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Perfil</p>
+                  <div className="flex items-center gap-3">
+                    <button onClick={()=>setMt("avatar")} className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-xl hover:scale-105 transition shadow-lg">{profile.emoji}</button>
+                    <div className="flex-1"><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome</label><input value={profile.name} onChange={(e)=>setProfile((p)=>({...p,name:e.target.value}))} className={ip}/></div>
+                  </div>
+                </div>
+                <div className={`${cd} rounded-xl p-4`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <Database size={14} className="text-indigo-400"/>
+                    <div className="flex-1">
+                      <p className={`text-[11px] font-bold ${tx}`}>Supabase conectado</p>
+                      <p className={`text-[9px] ${mu}`}>lwbqdkngtgwfafezhzul.supabase.co</p>
+                    </div>
+                    <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${syncStatus==="error"?"bg-red-500/15 text-red-400":"bg-emerald-500/15 text-emerald-400"}`}>{syncStatus==="error"?"Offline":"Online"}</div>
+                  </div>
+                  <p className={`text-[10px] ${mu} mb-3`}>Seus dados são salvos automaticamente no banco de dados a cada alteração.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={async()=>{ setSyncStatus("saving"); try { const d=await sbLoad(); if(d&&d.subjects){ setSubjects(d.subjects); setRecords(d.records||[]); setGoals(d.goals||[]); if(d.profile)setProfile(d.profile); if(typeof d.dark==="boolean")setDk(d.dark);} setSyncStatus("saved"); flash("Dados recarregados do banco!"); } catch{ setSyncStatus("error"); flash("Falha ao recarregar"); } }} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30":"bg-indigo-50 text-indigo-600 hover:bg-indigo-100"}`}><RotateCcw size={13}/>Recarregar do banco</button>
+                    <button onClick={()=>{ const json=JSON.stringify({subjects,records,goals,profile,dark:dk}); if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(json).then(()=>flash("Backup copiado!")).catch(()=>flash("Não foi possível copiar")); } else flash("Clipboard indisponível"); }} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Download size={13}/>Copiar backup</button>
+                  </div>
+                </div>
+                <div className={`${cd} rounded-xl p-4`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest`}>Metas</p>
+                    <button onClick={openAddGoal} className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow"><Plus size={12}/>Nova</button>
+                  </div>
+                  <div className="space-y-2.5">
+                    {goals.map((g)=>{const pct=gPct(g),days=gDL(g),ci=CATS.find((c)=>c.id===g.category); return(
+                      <div key={g.id} className={`p-3 rounded-lg ${dk?"bg-white/[0.04]":"bg-gray-50"} group`}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">{ci&&<ci.icon size={12} style={{color:ci.color}}/>}<span className={`text-[12px] font-bold ${tx} truncate`}>{g.title}</span></div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {days!==null?<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${days<=7?"bg-red-500/15 text-red-400":"bg-indigo-500/15 text-indigo-400"}`}>{days}d</span>:<span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">Sem prazo</span>}
+                            <button onClick={()=>openEditGoal(g)} className="p-1 rounded opacity-0 group-hover:opacity-100 transition"><Edit3 size={11} className={mu}/></button>
+                            <button onClick={()=>delGoal(g.id)} className="p-1 rounded opacity-0 group-hover:opacity-100 transition"><Trash2 size={11} className="text-red-400"/></button>
+                          </div>
+                        </div>
+                        <div className={`w-full h-1.5 rounded-full ${dk?"bg-white/10":"bg-gray-200"}`}><div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all" style={{width:`${pct}%`}}/></div>
+                      </div>
+                    );})}
+                    {goals.length===0&&<p className={`text-xs ${mu} text-center py-4`}>Nenhuma meta</p>}
+                  </div>
+                </div>
+                <div className={`${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Aparência</p>
+                  <div className="flex gap-2.5">
+                    <button onClick={()=>setDk(false)} className={`flex-1 p-3 rounded-lg border-2 flex flex-col items-center gap-1 transition ${!dk?"border-indigo-500 bg-indigo-50":"border-transparent"}`}><Sun size={16} className={!dk?"text-indigo-600":mu}/><span className={`text-[11px] font-bold ${tx}`}>Claro</span></button>
+                    <button onClick={()=>setDk(true)} className={`flex-1 p-3 rounded-lg border-2 flex flex-col items-center gap-1 transition ${dk?"border-indigo-500 bg-indigo-500/10":"border-transparent"}`}><Moon size={16} className={dk?"text-indigo-400":mu}/><span className={`text-[11px] font-bold ${tx}`}>Escuro</span></button>
+                  </div>
+                </div>
+                <div className={`${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Zona de Perigo</p>
+                  <button onClick={resetAll} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${confirmReset?"bg-red-500 text-white animate-pulse":"bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}><RotateCcw size={13}/>{confirmReset?"Clique de novo para confirmar!":"Resetar todos os dados"}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      {/* MODALS */}
+      <Mdl open={mt==="addRec"} onClose={cl} title="Adicionar Registro" dk={dk}>
+        <div className="space-y-2.5">
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Data</label><input type="date" value={mDate} onChange={(e)=>smDate(e.target.value)} className={ip}/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Categoria</label><select value={mRecCat} onChange={(e)=>{setMRecCat(e.target.value); const f=subjects.filter(s=>e.target.value==="all"||s.category===e.target.value); if(f.length>0)smSub(f[0].id);}} className={ip}><option value="all">Todas</option>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Conteúdo</label><select value={mSub} onChange={(e)=>smSub(e.target.value)} className={ip}>{subjects.filter(s=>mRecCat==="all"||s.category===mRecCat).map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Duração (min)</label><input type="number" min="1" value={mDur} onChange={(e)=>smDur(e.target.value)} className={ip}/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Notas</label><input value={mNotes} onChange={(e)=>smNotes(e.target.value)} placeholder="Opcional..." className={ip}/></div>
+          <button onClick={()=>{if(mSub&&mDur){addRec(mSub,mDate,mDur,mNotes);cl();}}} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>Salvar</button>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="addSub"||mt==="editSub"} onClose={cl} title={mt==="addSub"?"Novo Conteúdo":"Editar Conteúdo"} dk={dk}>
+        <div className="space-y-2.5">
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome</label><input value={mName} onChange={(e)=>smName(e.target.value)} className={ip} placeholder="Ex: Fundamentos de Teste"/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Categoria</label><select value={mCat} onChange={(e)=>smCat(e.target.value)} className={ip}>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Cor</label><div className="flex gap-1.5 flex-wrap">{COLS.map((c)=><button key={c} onClick={()=>smColor(c)} className={`w-6 h-6 rounded-md transition ${mColor===c?"scale-110 ring-2 ring-offset-1 ring-indigo-500":""}`} style={{background:c}}/>)}</div></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Ícone</label><div className="flex gap-1 flex-wrap">{ICO.map((ic)=>{const IC=ic.c; return <button key={ic.n} onClick={()=>smIcon(ic.n)} className={`w-7 h-7 rounded-md flex items-center justify-center transition ${mIcon===ic.n?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><IC size={13}/></button>;})}</div></div>
+          <button onClick={()=>{if(!mName) return; if(mt==="addSub"){setSubjects((p)=>[...p,{id:uid(),name:mName,icon:mIcon,color:mColor,category:mCat}]);flash("Criado!");}else{setSubjects((p)=>p.map((s)=>s.id===mId?{...s,name:mName,icon:mIcon,color:mColor,category:mCat}:s));flash("Atualizado!");} cl();}} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{mt==="addSub"?"Criar":"Salvar"}</button>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="addGoal"||mt==="editGoal"} onClose={cl} title={mt==="addGoal"?"Nova Meta":"Editar Meta"} dk={dk}>
+        <div className="space-y-2.5">
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Título</label><input value={mTitle} onChange={(e)=>smTitle(e.target.value)} className={ip} placeholder="Ex: Certificação CTFL"/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Categoria</label><select value={mCat} onChange={(e)=>smCat(e.target.value)} className={ip}>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Meta (horas)</label><input type="number" min="1" value={mTH} onChange={(e)=>smTH(parseInt(e.target.value)||0)} className={ip}/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Data Início</label><input type="date" value={mSD} onChange={(e)=>smSD(e.target.value)} className={ip}/></div>
+          <div className="flex items-center gap-2"><label className={`text-[10px] ${mu}`}>Data fim?</label><button onClick={()=>smHE(!mHE)} className={`w-9 h-5 rounded-full transition flex items-center px-0.5 ${mHE?"bg-indigo-500":"bg-gray-300"}`}><div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${mHE?"translate-x-4":""}`}/></button></div>
+          {mHE&&<div><label className={`text-[9px] ${mu} mb-0.5 block`}>Data Fim</label><input type="date" value={mED} onChange={(e)=>smED(e.target.value)} className={ip}/></div>}
+          <button onClick={()=>{if(!mTitle) return; const d={title:mTitle,startDate:mSD,endDate:mHE?mED||null:null,targetHours:mTH,category:mCat}; if(mt==="addGoal"){setGoals((p)=>[...p,{id:uid(),...d}]);flash("Meta criada!");}else{setGoals((p)=>p.map((g)=>g.id===mId?{...g,...d}:g));flash("Atualizada!");} cl();}} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{mt==="addGoal"?"Criar":"Salvar"}</button>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="profile"} onClose={cl} title="Editar Perfil" dk={dk}>
+        <div className="space-y-3">
+          <div className="flex justify-center"><button onClick={()=>setMt("avatar")} className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-2xl hover:scale-105 transition shadow-lg">{profile.emoji}</button></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome</label><input value={mPN} onChange={(e)=>smPN(e.target.value)} className={ip}/></div>
+          <button onClick={()=>{setProfile((p)=>({...p,name:mPN||p.name}));flash("Salvo!");cl();}} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>Salvar</button>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="avatar"} onClose={cl} title="Avatar" dk={dk}>
+        <div className="grid grid-cols-6 gap-2">{EMO.map((em)=><button key={em} onClick={()=>{setProfile((p)=>({...p,emoji:em}));flash("Avatar!");cl();}} className={`w-10 h-10 rounded-lg text-lg flex items-center justify-center transition hover:scale-110 ${profile.emoji===em?"ring-2 ring-indigo-500 bg-indigo-500/20":""} ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}>{em}</button>)}</div>
+      </Mdl>
+
+      {/* PRINT */}
+      {printMode&&(
+        <div className="fixed inset-0 z-[200] bg-white overflow-auto" id="print-area">
+          <div className="fixed top-4 right-4 flex gap-2 z-10">
+            <button onClick={()=>{const el=document.getElementById("print-content"); if(!el) return; const w=window.open("","_blank"); if(!w) return; w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>EstudoFlow</title><style>body{font-family:'Segoe UI',system-ui,sans-serif;margin:0;padding:0;color:#1f2937}</style></head><body>${el.innerHTML}</body></html>`); w.document.close(); setTimeout(()=>w.print(),400);}} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-lg flex items-center gap-2"><Printer size={16}/>Imprimir / PDF</button>
+            <button onClick={()=>setPrintMode(null)} className="px-4 py-2 rounded-xl bg-gray-200 text-gray-700 text-sm font-bold shadow"><X size={16}/></button>
+          </div>
+          <div id="print-content">
+            {printMode==="cert"&&(
+              <div className="min-h-screen flex items-center justify-center p-8">
+                <div className="w-full max-w-2xl border-4 border-indigo-600 rounded-3xl p-12 text-center relative overflow-hidden">
+                  <div className="absolute inset-0 opacity-[0.03]" style={{backgroundImage:"repeating-linear-gradient(45deg,#6366f1 0,#6366f1 1px,transparent 0,transparent 50%)",backgroundSize:"20px 20px"}}/>
+                  <div className="relative">
+                    <div className="flex justify-center mb-4"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg"><Award size={32} className="text-white"/></div></div>
+                    <p className="text-xs font-bold text-indigo-500 uppercase tracking-[0.3em] mb-2">EstudoFlow</p>
+                    <h1 className="text-3xl font-extrabold text-gray-800 mb-1">Certificado de Horas</h1>
+                    <div className="w-20 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 mx-auto rounded-full mb-6"/>
+                    <p className="text-gray-600 text-sm mb-3">Certificamos que</p>
+                    <p className="text-2xl font-extrabold text-gray-900 mb-6 border-b-2 border-indigo-200 pb-3 inline-block px-8">{profile.name}</p>
+                    <p className="text-gray-600 text-sm mb-2">completou um total de</p>
+                    <p className="text-5xl font-extrabold text-indigo-600 mb-6">{fmtDur(rT)}</p>
+                    <div className="grid grid-cols-3 gap-4 mb-8">
+                      <div className="bg-indigo-50 rounded-xl p-3"><p className="text-xl font-extrabold text-indigo-600">{rRecs.length}</p><p className="text-[10px] text-gray-500 font-semibold">Sessões</p></div>
+                      <div className="bg-indigo-50 rounded-xl p-3"><p className="text-xl font-extrabold text-indigo-600">{rDy}</p><p className="text-[10px] text-gray-500 font-semibold">Dias Ativos</p></div>
+                      <div className="bg-indigo-50 rounded-xl p-3"><p className="text-xl font-extrabold text-indigo-600">{rDy>0?fmtDur(Math.round(rT/rDy)):"—"}</p><p className="text-[10px] text-gray-500 font-semibold">Média/Dia</p></div>
+                    </div>
+                    {rTop.length>0&&<div className="mb-8"><p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Conteúdos</p><div className="flex flex-wrap justify-center gap-2">{rTop.map((s)=><span key={s.id} className="px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">{s.name} — {fmtDur(s.mins)}</span>)}</div></div>}
+                    <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
+                      <div className="text-left"><p className="text-[10px] text-gray-400">Emitido em</p><p className="text-sm font-bold text-gray-700">{toK(TODAY).split("-").reverse().join("/")}</p></div>
+                      <div className="text-right"><div className="w-32 border-b border-gray-300 mb-1"/><p className="text-xs text-gray-500">Assinatura Digital</p><p className="text-[10px] text-gray-400 font-mono mt-1">ID: EF-{uid()}</p></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {printMode==="report"&&(
+              <div className="max-w-3xl mx-auto p-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center"><BookOpen size={20} className="text-white"/></div>
+                  <div><p className="text-lg font-extrabold text-gray-800">EstudoFlow — Relatório {rP==="day"?"Diário":rP==="week"?"Semanal":rP==="month"?"Mensal":"Anual"}</p><p className="text-xs text-gray-400">Gerado em {toK(TODAY).split("-").reverse().join("/")}</p></div>
+                </div>
+                <div className="grid grid-cols-4 gap-3 mb-6">{[{l:"Total",v:fmtDur(rT)},{l:"Sessões",v:rRecs.length},{l:"Dias Ativos",v:rDy},{l:"Média/Dia",v:rDy>0?fmtDur(Math.round(rT/rDy)):"—"}].map((s,i)=><div key={i} className="border border-gray-200 rounded-xl p-3 text-center"><p className="text-xs text-gray-400">{s.l}</p><p className="text-lg font-extrabold text-gray-800">{s.v}</p></div>)}</div>
+                {rByCat.length>0&&<div className="mb-6"><p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Por Categoria</p>{rByCat.map((c)=><div key={c.name} className="flex items-center gap-3 mb-2"><span className="text-sm font-semibold text-gray-700 w-32">{c.name}</span><div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{width:`${rT>0?Math.round(c.horas*60/rT*100):0}%`,background:c.color}}/></div><span className="text-xs font-bold text-gray-500 w-16 text-right">{c.horas}h</span></div>)}</div>}
+                {rTop.length>0&&<div className="mb-6"><p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Top Conteúdos</p><table className="w-full text-sm"><thead><tr className="border-b border-gray-200"><th className="text-left py-2 text-xs text-gray-400 font-bold">Conteúdo</th><th className="text-right py-2 text-xs text-gray-400 font-bold">Tempo</th><th className="text-right py-2 text-xs text-gray-400 font-bold">%</th></tr></thead><tbody>{rTop.map((s)=><tr key={s.id} className="border-b border-gray-100"><td className="py-2 font-semibold text-gray-700">{s.name}</td><td className="py-2 text-right text-gray-600">{fmtDur(s.mins)}</td><td className="py-2 text-right text-gray-500">{s.pct}%</td></tr>)}</tbody></table></div>}
+                {rRecs.length>0&&<div><p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Registros ({rRecs.length})</p><table className="w-full text-xs"><thead><tr className="border-b border-gray-200"><th className="text-left py-1.5 text-gray-400 font-bold">Data</th><th className="text-left py-1.5 text-gray-400 font-bold">Conteúdo</th><th className="text-right py-1.5 text-gray-400 font-bold">Duração</th></tr></thead><tbody>{[...rRecs].sort((a,b)=>a.date.localeCompare(b.date)).map((r)=>{const s=gS(r.subjectId); return s?<tr key={r.id} className="border-b border-gray-50"><td className="py-1.5 text-gray-500">{r.date.split("-").reverse().join("/")}</td><td className="py-1.5 text-gray-700 font-medium">{s.name}</td><td className="py-1.5 text-right text-gray-600">{fmtDur(r.duration)}</td></tr>:null;})}</tbody></table></div>}
+                <div className="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-400"><span>EstudoFlow · {profile.name}</span><span>{toK(TODAY).split("-").reverse().join("/")}</span></div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
