@@ -9,29 +9,10 @@ import {
   ChevronLeft, ChevronRight, Trash2, Edit3, Save, FileText, Filter, Menu,
   Dumbbell, BookMarked, Beaker, Globe, Calculator, Atom, Pen, Music,
   Code, Palette, Heart, Mountain, Bike, Target, BarChart3, RotateCcw,
-  Download, Upload, Printer, Award, Wifi, WifiOff, Database
+  Download, Upload, Printer, Award, Wifi, WifiOff, Database, LogOut, KeyRound
 } from "lucide-react";
-
-/* ─── Supabase ─── */
-const SB_URL = import.meta.env.VITE_SUPABASE_URL || "https://nbxizbbhvcukmhsbprvc.supabase.co";
-const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ieGl6YmJodmN1a21oc2JwcnZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyOTI4NjIsImV4cCI6MjA5MTg2ODg2Mn0._YzJLYUpBghwMeLGoLU62Sor9vSJAtOrljfe4YzAjNs";
-const SB_HDR = { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
-
-const sbLoad = async () => {
-  const r = await fetch(`${SB_URL}/rest/v1/estudoflow?id=eq.default&select=data`, { headers: SB_HDR });
-  if (!r.ok) throw new Error("load failed");
-  const rows = await r.json();
-  return rows[0]?.data || null;
-};
-
-const sbSave = async (data) => {
-  const r = await fetch(`${SB_URL}/rest/v1/estudoflow`, {
-    method: "POST",
-    headers: { ...SB_HDR, "Prefer": "resolution=merge-duplicates" },
-    body: JSON.stringify({ id: "default", data, updated_at: new Date().toISOString() })
-  });
-  if (!r.ok) throw new Error("save failed");
-};
+import { supabase } from "./supabaseClient";
+import { loadUserData, saveUserData } from "./data";
 
 /* ─── Helpers ─── */
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -107,7 +88,11 @@ function CTip({ active, payload, dark }) {
 }
 
 /* ═══════════════ MAIN ═══════════════ */
-export default function EstudoFlow() {
+export default function EstudoFlow({ user }) {
+  const defaultProfile = {
+    name: user?.user_metadata?.name || (user?.email ? user.email.split("@")[0] : "Usuário"),
+    emoji: "🧑‍💻",
+  };
   const [dk, setDk] = useState(false);
   const [pg, setPg] = useState("Dashboard");
   const [sb, setSb] = useState(false);
@@ -117,8 +102,13 @@ export default function EstudoFlow() {
   const [subjects, setSubjects] = useState([]);
   const [records, setRecords] = useState([]);
   const [goals, setGoals] = useState([]);
-  const [profile, setProfile] = useState({ name: "André S.", emoji: "🧑‍💻" });
+  const [profile, setProfile] = useState(defaultProfile);
   const [notif, setNotif] = useState(null);
+
+  /* ── Conta / segurança ── */
+  const [npw1, setNpw1] = useState("");
+  const [npw2, setNpw2] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
 
   /* ── Load from Supabase ── */
   useEffect(() => {
@@ -126,13 +116,13 @@ export default function EstudoFlow() {
       if (!loaded) { setSubjects(mkSubs()); setLoaded(true); }
     }, 5000);
 
-    sbLoad().then((d) => {
+    loadUserData(user.id).then((d) => {
       clearTimeout(fallback);
       if (d && d.subjects && d.subjects.length > 0) {
         setSubjects(d.subjects);
         setRecords(d.records || []);
         setGoals(d.goals || []);
-        setProfile(d.profile || { name: "André S.", emoji: "🧑‍💻" });
+        setProfile(d.profile || defaultProfile);
         if (typeof d.dark === "boolean") setDk(d.dark);
       } else {
         setSubjects(mkSubs());
@@ -146,7 +136,7 @@ export default function EstudoFlow() {
     });
 
     return () => clearTimeout(fallback);
-  }, []);
+  }, [user.id]);
 
   /* ── Save to Supabase (debounced) ── */
   const saveRef = useRef(null);
@@ -157,11 +147,11 @@ export default function EstudoFlow() {
     clearTimeout(saveRef.current);
     setSyncStatus("saving");
     saveRef.current = setTimeout(() => {
-      sbSave({ subjects, records, goals, profile, dark: dk })
+      saveUserData(user.id, { subjects, records, goals, profile, dark: dk })
         .then(() => setSyncStatus("saved"))
         .catch(() => setSyncStatus("error"));
     }, 1200);
-  }, [subjects, records, goals, profile, dk, loaded]);
+  }, [subjects, records, goals, profile, dk, loaded, user.id]);
 
   const [tText, setTText] = useState("");
   const [tCat, setTCat] = useState("estudos");
@@ -203,6 +193,18 @@ export default function EstudoFlow() {
   const [rCatView, setRCatView] = useState("cat");
 
   const flash = useCallback((m) => { setNotif(m); setTimeout(() => setNotif(null), 2200); }, []);
+
+  const sair = useCallback(async () => { await supabase.auth.signOut(); }, []);
+
+  const mudarSenha = useCallback(async () => {
+    if (npw1.length < 6) { flash("Senha precisa de 6+ caracteres"); return; }
+    if (npw1 !== npw2) { flash("As senhas não conferem"); return; }
+    setPwBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: npw1 });
+    setPwBusy(false);
+    if (error) { flash("Erro ao trocar senha"); return; }
+    setNpw1(""); setNpw2(""); flash("Senha alterada!");
+  }, [npw1, npw2, flash]);
 
   useEffect(() => {
     if (tOn && !tP && tStartedAt) {
@@ -419,6 +421,7 @@ export default function EstudoFlow() {
               <button onClick={openProfile} className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-sm hover:scale-105 transition-transform">{profile.emoji}</button>
               <span className={`text-xs font-semibold ${tx} hidden md:block`}>{profile.name}</span>
               <button onClick={()=>setDk(!dk)} className={`p-1.5 rounded-lg transition ${dk?"bg-yellow-500/20 text-yellow-400":"bg-indigo-50 text-indigo-500"}`}>{dk?<Sun size={15}/>:<Moon size={15}/>}</button>
+              <button onClick={sair} title="Sair" className={`p-1.5 rounded-lg transition ${dk?"hover:bg-red-500/20 text-red-400":"hover:bg-red-50 text-red-500"}`}><LogOut size={15}/></button>
             </div>
           </div>
         </header>
@@ -696,18 +699,39 @@ export default function EstudoFlow() {
                     <div className="flex-1"><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome</label><input value={profile.name} onChange={(e)=>setProfile((p)=>({...p,name:e.target.value}))} className={ip}/></div>
                   </div>
                 </div>
+                {/* CONTA */}
+                <div className={`${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Conta</p>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-base flex-shrink-0">{profile.emoji}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[12px] font-bold ${tx} truncate`}>{profile.name}</p>
+                      <p className={`text-[10px] ${mu} truncate`}>{user?.email}</p>
+                    </div>
+                    <button onClick={sair} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition bg-red-500/10 text-red-500 hover:bg-red-500/20"><LogOut size={13}/>Sair</button>
+                  </div>
+                  <div className={`border-t pt-3 ${dk?"border-white/10":"border-gray-100"}`}>
+                    <div className="flex items-center gap-1.5 mb-2"><KeyRound size={13} className="text-indigo-400"/><p className={`text-[11px] font-bold ${tx}`}>Alterar senha</p></div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input type="password" value={npw1} onChange={(e)=>setNpw1(e.target.value)} placeholder="Nova senha" className={`${ip} sm:flex-1`}/>
+                      <input type="password" value={npw2} onChange={(e)=>setNpw2(e.target.value)} placeholder="Confirmar" className={`${ip} sm:flex-1`}/>
+                      <button onClick={mudarSenha} disabled={pwBusy} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow disabled:opacity-50 flex-shrink-0"><Save size={13}/>Salvar</button>
+                    </div>
+                  </div>
+                </div>
+                {/* DADOS */}
                 <div className={`${cd} rounded-xl p-4`}>
                   <div className="flex items-center gap-3 mb-2">
                     <Database size={14} className="text-indigo-400"/>
                     <div className="flex-1">
-                      <p className={`text-[11px] font-bold ${tx}`}>Supabase conectado</p>
-                      <p className={`text-[9px] ${mu}`}>lwbqdkngtgwfafezhzul.supabase.co</p>
+                      <p className={`text-[11px] font-bold ${tx}`}>Sincronização na nuvem</p>
+                      <p className={`text-[9px] ${mu}`}>Dados privados, isolados por conta</p>
                     </div>
                     <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${syncStatus==="error"?"bg-red-500/15 text-red-400":"bg-emerald-500/15 text-emerald-400"}`}>{syncStatus==="error"?"Offline":"Online"}</div>
                   </div>
-                  <p className={`text-[10px] ${mu} mb-3`}>Seus dados são salvos automaticamente no banco de dados a cada alteração.</p>
+                  <p className={`text-[10px] ${mu} mb-3`}>Tudo é salvo automaticamente a cada alteração.</p>
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={async()=>{ setSyncStatus("saving"); try { const d=await sbLoad(); if(d&&d.subjects){ setSubjects(d.subjects); setRecords(d.records||[]); setGoals(d.goals||[]); if(d.profile)setProfile(d.profile); if(typeof d.dark==="boolean")setDk(d.dark);} setSyncStatus("saved"); flash("Dados recarregados do banco!"); } catch{ setSyncStatus("error"); flash("Falha ao recarregar"); } }} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30":"bg-indigo-50 text-indigo-600 hover:bg-indigo-100"}`}><RotateCcw size={13}/>Recarregar do banco</button>
+                    <button onClick={async()=>{ setSyncStatus("saving"); try { const d=await loadUserData(user.id); if(d&&d.subjects){ setSubjects(d.subjects); setRecords(d.records||[]); setGoals(d.goals||[]); if(d.profile)setProfile(d.profile); if(typeof d.dark==="boolean")setDk(d.dark);} setSyncStatus("saved"); flash("Dados recarregados!"); } catch{ setSyncStatus("error"); flash("Falha ao recarregar"); } }} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30":"bg-indigo-50 text-indigo-600 hover:bg-indigo-100"}`}><RotateCcw size={13}/>Recarregar</button>
                     <button onClick={()=>{ const json=JSON.stringify({subjects,records,goals,profile,dark:dk}); if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(json).then(()=>flash("Backup copiado!")).catch(()=>flash("Não foi possível copiar")); } else flash("Clipboard indisponível"); }} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Download size={13}/>Copiar backup</button>
                   </div>
                 </div>
