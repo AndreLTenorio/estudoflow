@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import {
   BookOpen, Mail, Lock, User, Eye, EyeOff, ArrowLeft, Loader2,
-  Clock, TrendingUp, Target, Award, Cloud, CalendarCheck, Sparkles,
+  Clock, TrendingUp, Target, Award, Cloud, Sparkles,
+  Play, Pause, Square, Monitor, Smartphone, Check,
 } from "lucide-react";
 
 const redirectTo =
@@ -42,6 +43,79 @@ const FEATURES = [
   },
 ];
 
+/* Mockup visual (mini-tela) de cada funcionalidade */
+function SlideVisual({ idx }) {
+  const card = "rounded-2xl bg-white/12 backdrop-blur border border-white/20 shadow-2xl mb-6";
+  if (idx === 0)
+    return (
+      <div className={`${card} p-5 w-72`}>
+        <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest mb-1">Sessão atual</p>
+        <p className="text-white text-4xl font-extrabold tracking-tight" style={{ fontVariantNumeric: "tabular-nums" }}>00:45:12</p>
+        <div className="flex gap-1.5 mt-3">
+          <span className="px-2.5 py-1 rounded-lg bg-emerald-400 text-white text-[10px] font-bold flex items-center gap-1"><Play size={10} />Iniciar</span>
+          <span className="px-2.5 py-1 rounded-lg bg-amber-400 text-white text-[10px] font-bold flex items-center gap-1"><Pause size={10} />Pausar</span>
+          <span className="px-2.5 py-1 rounded-lg bg-red-400 text-white text-[10px] font-bold flex items-center gap-1"><Square size={9} />Parar</span>
+        </div>
+      </div>
+    );
+  if (idx === 1) {
+    const bars = [40, 70, 45, 90, 60, 80, 55];
+    return (
+      <div className={`${card} p-5 w-72`}>
+        <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest mb-3">Evolução semanal</p>
+        <div className="flex items-end gap-2 h-24">
+          {bars.map((h, b) => <div key={b} className="flex-1 rounded-t-md bg-white/85" style={{ height: `${h}%` }} />)}
+        </div>
+        <div className="flex justify-between mt-1.5 text-white/50 text-[9px] font-semibold">
+          {["S", "T", "Q", "Q", "S", "S", "D"].map((d, b) => <span key={b}>{d}</span>)}
+        </div>
+      </div>
+    );
+  }
+  if (idx === 2) {
+    const r = 34, c = 2 * Math.PI * r;
+    return (
+      <div className={`${card} p-5 w-72 flex items-center gap-4`}>
+        <div className="relative w-20 h-20 flex-shrink-0">
+          <svg width="80" height="80" className="-rotate-90">
+            <circle cx="40" cy="40" r={r} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="8" />
+            <circle cx="40" cy="40" r={r} fill="none" stroke="white" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - 0.68)} />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center text-white font-extrabold">68%</div>
+        </div>
+        <div>
+          <p className="text-white font-bold text-sm">Certificação CTFL</p>
+          <p className="text-white/60 text-xs mt-0.5">34h de 50h</p>
+          <p className="text-white/50 text-[10px] mt-1">faltam 23 dias</p>
+        </div>
+      </div>
+    );
+  }
+  if (idx === 3)
+    return (
+      <div className={`${card} p-5 w-72`}>
+        <div className="rounded-xl border-2 border-white/30 p-4 text-center">
+          <Award size={24} className="text-white mx-auto mb-1.5" />
+          <p className="text-white/70 text-[8px] font-bold uppercase tracking-[0.25em]">Certificado de Horas</p>
+          <p className="text-white text-2xl font-extrabold mt-1">120h</p>
+          <div className="w-16 h-px bg-white/30 mx-auto my-2" />
+          <p className="text-white/70 text-[10px]">André Luiz Tenório</p>
+        </div>
+      </div>
+    );
+  return (
+    <div className={`${card} p-5 w-72 flex flex-col items-center`}>
+      <Cloud size={34} className="text-white mb-3" />
+      <div className="flex items-center gap-4">
+        <div className="flex flex-col items-center gap-1"><Monitor size={24} className="text-white/90" /><span className="text-white/50 text-[8px] font-semibold">PC</span></div>
+        <span className="text-white/40 font-bold tracking-widest">· · ·</span>
+        <div className="flex flex-col items-center gap-1"><Smartphone size={22} className="text-white/90" /><span className="text-white/50 text-[8px] font-semibold">Celular</span></div>
+      </div>
+      <span className="mt-3 px-2.5 py-1 rounded-full bg-emerald-400 text-white text-[9px] font-bold flex items-center gap-1"><Check size={9} />Sincronizado</span>
+    </div>
+  );
+}
+
 function Carrossel() {
   const [i, setI] = useState(0);
   useEffect(() => {
@@ -66,12 +140,9 @@ function Carrossel() {
         <div className="overflow-hidden">
           <div className="flex transition-transform duration-700 ease-out" style={{ transform: `translateX(-${i * 100}%)` }}>
             {FEATURES.map((f, idx) => {
-              const Ic = f.icon;
               return (
                 <div key={idx} className="min-w-full pr-2">
-                  <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center shadow-lg mb-6">
-                    <Ic size={30} className="text-white" />
-                  </div>
+                  <SlideVisual idx={idx} />
                   <span className="inline-block text-[11px] font-bold uppercase tracking-widest text-white/70 mb-2">{f.tag}</span>
                   <h2 className="text-3xl font-extrabold text-white leading-tight mb-3">{f.title}</h2>
                   <p className="text-white/80 text-sm leading-relaxed max-w-sm">{f.desc}</p>
