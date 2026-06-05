@@ -126,7 +126,12 @@ export default function EstudoFlow({ user }) {
         setProfile(d.profile || defaultProfile);
         if (typeof d.dark === "boolean") setDk(d.dark);
       } else {
-        setSubjects(mkSubs());
+        // Primeiro acesso (sem dados na nuvem) → leva o novato pro "Sobre"
+        const seed = mkSubs();
+        setSubjects(seed);
+        setPg("Sobre");
+        // cria a linha do usuário já no 1º acesso → nas próximas vezes cai no Dashboard
+        saveUserData(user.id, { subjects: seed, records: [], goals: [], profile: defaultProfile, dark: dk }).catch(() => {});
       }
       setLoaded(true);
     }).catch(() => {
