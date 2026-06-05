@@ -9,7 +9,8 @@ import {
   ChevronLeft, ChevronRight, Trash2, Edit3, Save, FileText, Filter, Menu,
   Dumbbell, BookMarked, Beaker, Globe, Calculator, Atom, Pen, Music,
   Code, Palette, Heart, Mountain, Bike, Target, BarChart3, RotateCcw,
-  Download, Upload, Printer, Award, Wifi, WifiOff, Database, LogOut, KeyRound
+  Download, Upload, Printer, Award, Wifi, WifiOff, Database, LogOut, KeyRound,
+  Info, Sparkles, GraduationCap, Users, Rocket, Cloud
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { loadUserData, saveUserData } from "./data";
@@ -344,7 +345,7 @@ export default function EstudoFlow({ user }) {
 
   const cDIM = new Date(calY, calM+1, 0).getDate(), cFD = new Date(calY, calM, 1).getDay();
   const nav = (p) => { setPg(p); setSb(false); };
-  const menus = [{n:"Dashboard",i:LayoutDashboard},{n:"Conteúdos",i:BookOpen},{n:"Histórico",i:Clock},{n:"Relatórios",i:BarChart3},{n:"Configurações",i:Settings}];
+  const menus = [{n:"Dashboard",i:LayoutDashboard},{n:"Conteúdos",i:BookOpen},{n:"Histórico",i:Clock},{n:"Relatórios",i:BarChart3},{n:"Configurações",i:Settings},{n:"Sobre",i:Info}];
 
   const BtnAct = ({ children, color, onClick, disabled }) => (
     <button onClick={onClick} disabled={disabled} className={`inline-flex items-center gap-1 px-3.5 py-2 rounded-lg ${color} text-white text-xs font-bold shadow-md transition hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed`}>{children}</button>
@@ -768,6 +769,94 @@ export default function EstudoFlow({ user }) {
                   <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Zona de Perigo</p>
                   <button onClick={resetAll} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${confirmReset?"bg-red-500 text-white animate-pulse":"bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}><RotateCcw size={13}/>{confirmReset?"Clique de novo para confirmar!":"Resetar todos os dados"}</button>
                 </div>
+              </div>
+            )}
+
+            {/* SOBRE */}
+            {pg==="Sobre"&&(
+              <div className="space-y-4 max-w-4xl">
+                {/* HERO */}
+                <div className="relative overflow-hidden rounded-2xl p-6 md:p-8 bg-gradient-to-br from-indigo-500 via-purple-600 to-fuchsia-600 text-white">
+                  <div className="absolute -top-16 -right-10 w-56 h-56 rounded-full bg-white/10 blur-3xl"/>
+                  <div className="relative">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center"><BookOpen size={24}/></div>
+                      <div>
+                        <h2 className="text-2xl font-extrabold tracking-tight">EstudoFlow</h2>
+                        <p className="text-white/70 text-xs">Controle Pessoal de Estudos</p>
+                      </div>
+                    </div>
+                    <p className="text-white/90 text-sm md:text-base leading-relaxed max-w-2xl">
+                      O EstudoFlow transforma cada sessão de estudo em <strong>dados</strong>: você cronometra,
+                      registra e acompanha sua evolução com gráficos, metas e relatórios — tudo salvo na nuvem
+                      e <strong>privado por conta</strong>. Em vez de anotações soltas, você enxerga de verdade
+                      quanto estudou e onde pode melhorar.
+                    </p>
+                  </div>
+                </div>
+
+                {/* OBJETIVO + PARA QUEM */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className={`${cd} rounded-xl p-5`}>
+                    <div className="flex items-center gap-2 mb-2"><div className="w-8 h-8 rounded-lg bg-indigo-500/15 flex items-center justify-center"><Target size={16} className="text-indigo-500"/></div><p className={`text-sm font-bold ${tx}`}>Qual o objetivo</p></div>
+                    <p className={`text-[13px] leading-relaxed ${dk?"text-gray-300":"text-gray-600"}`}>
+                      Dar clareza e constância aos seus estudos. Medindo o tempo dedicado e visualizando sua
+                      rotina, fica mais fácil criar o hábito, manter a disciplina e bater suas metas.
+                    </p>
+                  </div>
+                  <div className={`${cd} rounded-xl p-5`}>
+                    <div className="flex items-center gap-2 mb-2"><div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center"><Users size={16} className="text-emerald-500"/></div><p className={`text-sm font-bold ${tx}`}>Para quem é</p></div>
+                    <p className={`text-[13px] leading-relaxed ${dk?"text-gray-300":"text-gray-600"}`}>
+                      Estudantes de concursos, vestibular e faculdade, profissionais em certificações, e qualquer
+                      pessoa que queira organizar <strong>estudos</strong>, <strong>exercícios físicos</strong> e
+                      <strong> leituras</strong> em um só lugar.
+                    </p>
+                  </div>
+                </div>
+
+                {/* O QUE DÁ PRA FAZER */}
+                <div className={`${cd} rounded-xl p-5`}>
+                  <div className="flex items-center gap-2 mb-4"><Sparkles size={16} className="text-indigo-500"/><p className={`text-sm font-bold ${tx}`}>O que dá pra fazer</p></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {[
+                      {i:Clock,c:"#6366f1",t:"Cronometrar sessões",d:"Inicie, pause e retome — cada sessão vira registro automático."},
+                      {i:BookOpen,c:"#f59e0b",t:"Organizar conteúdos",d:"Matérias, treinos e livros com ícone e cor próprios."},
+                      {i:Target,c:"#10b981",t:"Definir metas",d:"Metas de horas com prazo e barra de progresso."},
+                      {i:BarChart3,c:"#8b5cf6",t:"Ver relatórios",d:"Gráficos por dia, semana, mês e ano + ranking."},
+                      {i:Award,c:"#ec4899",t:"Gerar certificado",d:"Relatório em PDF e certificado de horas com seu nome."},
+                      {i:Cloud,c:"#06b6d4",t:"Acessar de qualquer lugar",d:"Dados sincronizados e seguros, no PC ou no celular."},
+                    ].map((f,i)=>(
+                      <div key={i} className={`rounded-xl p-3.5 ${dk?"bg-white/[0.03]":"bg-gray-50"}`}>
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-2" style={{background:f.c+"1f"}}><f.i size={17} style={{color:f.c}}/></div>
+                        <p className={`text-[13px] font-bold ${tx} mb-0.5`}>{f.t}</p>
+                        <p className={`text-[11px] leading-snug ${mu}`}>{f.d}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* PRIVACIDADE */}
+                <div className={`${cd} rounded-xl p-5`}>
+                  <div className="flex items-center gap-2 mb-2"><KeyRound size={16} className="text-indigo-500"/><p className={`text-sm font-bold ${tx}`}>Privacidade & segurança</p></div>
+                  <p className={`text-[13px] leading-relaxed ${dk?"text-gray-300":"text-gray-600"}`}>
+                    Cada usuário tem sua própria conta e seus dados são <strong>totalmente isolados</strong> —
+                    ninguém vê o que é seu. As senhas são protegidas e a conexão é criptografada.
+                  </p>
+                </div>
+
+                {/* CTA */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-xl p-5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+                  <div className="flex items-center gap-3">
+                    <Rocket size={22}/>
+                    <div>
+                      <p className="font-bold text-sm">Pronto para começar?</p>
+                      <p className="text-white/80 text-xs">Vá para o painel e registre sua primeira sessão.</p>
+                    </div>
+                  </div>
+                  <button onClick={()=>nav("Dashboard")} className="px-4 py-2.5 rounded-xl bg-white text-indigo-600 font-bold text-sm shadow hover:bg-indigo-50 transition flex-shrink-0">Ir para o Dashboard</button>
+                </div>
+
+                <p className={`text-center text-[10px] ${mu} pt-1`}>EstudoFlow · feito com 💜 para sua jornada de estudos</p>
               </div>
             )}
           </div>
