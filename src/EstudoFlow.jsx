@@ -217,7 +217,7 @@ export default function EstudoFlow({ user }) {
 
   const cd = dk ? "bg-white/[0.04] border border-white/[0.07]" : "bg-white/80 border border-gray-200/60 shadow-sm";
   const tx = dk ? "text-gray-100" : "text-gray-800";
-  const mu = dk ? "text-gray-500" : "text-gray-400";
+  const mu = dk ? "text-gray-400" : "text-gray-500";
   const ip = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 transition ${dk ? "bg-gray-800 border-white/10 text-white placeholder-gray-600" : "bg-white border-gray-200 text-gray-800 placeholder-gray-400"}`;
 
   const gS = useCallback((id) => subjects.find((s) => s.id === id), [subjects]);
