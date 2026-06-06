@@ -167,6 +167,12 @@ export default function EstudoFlow({ user }) {
     }, 1200);
   }, [subjects, records, goals, tasks, columns, profile, dk, loaded, user.id]);
 
+  /* ── Marca o tema no <html> (para barras de rolagem tema-aware) ── */
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dk);
+    return () => document.documentElement.classList.remove("dark");
+  }, [dk]);
+
   const [tText, setTText] = useState("");
   const [tCat, setTCat] = useState("estudos");
   const [tOn, setTOn] = useState(false);

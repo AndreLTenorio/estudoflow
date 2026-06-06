@@ -8,3 +8,54 @@ body,
   height: 100%;
   margin: 0;
 }
+
+/* ───── Barras de rolagem: finas, tema-aware, aparecem no hover ───── */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover,
+*:focus-within {
+  scrollbar-color: rgba(120, 120, 140, 0.45) transparent;
+}
+.dark *:hover,
+.dark *:focus-within {
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+/* WebKit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  transition: background 0.2s;
+}
+/* Mostra o thumb quando o cursor está sobre a área rolável */
+*:hover::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 140, 0.45);
+  background-clip: padding-box;
+}
+.dark *:hover::-webkit-scrollbar-thumb,
+.dark *:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  background-clip: padding-box;
+}
+/* Realça com a cor do tema (índigo) ao passar direto sobre a barra */
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.75) !important;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
