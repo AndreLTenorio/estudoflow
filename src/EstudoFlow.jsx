@@ -111,6 +111,11 @@ export default function EstudoFlow({ user }) {
   const [goals, setGoals] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [columns, setColumns] = useState(DEFAULT_COLS);
+  // Estados usados no efeito de salvar (declarados aqui para evitar TDZ no array de deps)
+  const [pomo, setPomo] = useState({ focus: 25, short: 5, long: 15, untilLong: 4 });
+  const [schedule, setSchedule] = useState(null);
+  const [decks, setDecks] = useState([]);
+  const [cards, setCards] = useState([]);
   const [profile, setProfile] = useState(defaultProfile);
   const [notif, setNotif] = useState(null);
 
@@ -216,7 +221,6 @@ export default function EstudoFlow({ user }) {
   const [tkChecklist, setTkChecklist] = useState([]);
   const [tkNewItem, setTkNewItem] = useState("");
   // Pomodoro
-  const [pomo, setPomo] = useState({ focus: 25, short: 5, long: 15, untilLong: 4 });
   const [pmMode, setPmMode] = useState("focus");
   const [pmSec, setPmSec] = useState(25 * 60);
   const [pmOn, setPmOn] = useState(false);
@@ -224,13 +228,10 @@ export default function EstudoFlow({ user }) {
   const [pmSubj, setPmSubj] = useState("");
   const pmRef = useRef(null);
   // Cronograma
-  const [schedule, setSchedule] = useState(null);
   const [schBlocks, setSchBlocks] = useState(3);
   const [schDays, setSchDays] = useState(["Seg", "Ter", "Qua", "Qui", "Sex"]);
   const [schSubs, setSchSubs] = useState([]);
   // Flashcards
-  const [decks, setDecks] = useState([]);
-  const [cards, setCards] = useState([]);
   const [fcView, setFcView] = useState("decks");
   const [fcDeck, setFcDeck] = useState(null);
   const [fcQueue, setFcQueue] = useState([]);
