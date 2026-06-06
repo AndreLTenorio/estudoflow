@@ -12,7 +12,8 @@ import {
   Download, Upload, Printer, Award, Wifi, WifiOff, Database, LogOut, KeyRound,
   Info, Sparkles, GraduationCap, Users, Rocket, Cloud,
   ListTodo, Columns3, GripVertical, Circle, CheckCircle2, Flag, ArrowRight, CalendarDays,
-  Repeat, Hourglass, Archive, ArchiveRestore
+  Repeat, Hourglass, Archive, ArchiveRestore,
+  Timer, CalendarRange, Trophy, Zap, Coffee, Star, Lock
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { loadUserData, saveUserData } from "./data";
@@ -131,6 +132,8 @@ export default function EstudoFlow({ user }) {
         setGoals(d.goals || []);
         setTasks(d.tasks || []);
         setColumns(d.columns && d.columns.length ? d.columns : DEFAULT_COLS);
+        setSchedule(d.schedule || null);
+        if (d.pomo) { setPomo(d.pomo); setPmSec((d.pomo.focus || 25) * 60); }
         setProfile(d.profile || defaultProfile);
         if (typeof d.dark === "boolean") setDk(d.dark);
       } else {
@@ -139,7 +142,7 @@ export default function EstudoFlow({ user }) {
         setSubjects(seed);
         setPg("Sobre");
         // cria a linha do usuário já no 1º acesso → nas próximas vezes cai no Dashboard
-        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], columns: DEFAULT_COLS, profile: defaultProfile, dark: dk }).catch(() => {});
+        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], columns: DEFAULT_COLS, schedule: null, pomo, profile: defaultProfile, dark: dk }).catch(() => {});
       }
       setLoaded(true);
     }).catch(() => {
@@ -161,11 +164,11 @@ export default function EstudoFlow({ user }) {
     clearTimeout(saveRef.current);
     setSyncStatus("saving");
     saveRef.current = setTimeout(() => {
-      saveUserData(user.id, { subjects, records, goals, tasks, columns, profile, dark: dk })
+      saveUserData(user.id, { subjects, records, goals, tasks, columns, schedule, pomo, profile, dark: dk })
         .then(() => setSyncStatus("saved"))
         .catch(() => setSyncStatus("error"));
     }, 1200);
-  }, [subjects, records, goals, tasks, columns, profile, dk, loaded, user.id]);
+  }, [subjects, records, goals, tasks, columns, schedule, pomo, profile, dk, loaded, user.id]);
 
   /* ── Marca o tema no <html> (para barras de rolagem tema-aware) ── */
   useEffect(() => {
@@ -209,6 +212,19 @@ export default function EstudoFlow({ user }) {
   const [tkUsed, setTkUsed] = useState("");
   const [tkChecklist, setTkChecklist] = useState([]);
   const [tkNewItem, setTkNewItem] = useState("");
+  // Pomodoro
+  const [pomo, setPomo] = useState({ focus: 25, short: 5, long: 15, untilLong: 4 });
+  const [pmMode, setPmMode] = useState("focus");
+  const [pmSec, setPmSec] = useState(25 * 60);
+  const [pmOn, setPmOn] = useState(false);
+  const [pmCount, setPmCount] = useState(0);
+  const [pmSubj, setPmSubj] = useState("");
+  const pmRef = useRef(null);
+  // Cronograma
+  const [schedule, setSchedule] = useState(null);
+  const [schBlocks, setSchBlocks] = useState(3);
+  const [schDays, setSchDays] = useState(["Seg", "Ter", "Qua", "Qui", "Sex"]);
+  const [schSubs, setSchSubs] = useState([]);
   const [mDate, smDate] = useState("");
   const [mSub, smSub] = useState("");
   const [mDur, smDur] = useState("60");
@@ -420,10 +436,43 @@ export default function EstudoFlow({ user }) {
     flash("Status removido");
   };
 
+  // ── Pomodoro ──
+  useEffect(() => {
+    if (pmOn) pmRef.current = setInterval(() => setPmSec((s) => Math.max(0, s - 1)), 1000);
+    else clearInterval(pmRef.current);
+    return () => clearInterval(pmRef.current);
+  }, [pmOn]);
+  const pomoTransition = () => {
+    if (pmMode === "focus") {
+      if (pmSubj) setRecords((p) => [...p, { id: uid(), subjectId: pmSubj, date: toK(TODAY), duration: pomo.focus, notes: "Pomodoro" }]);
+      const n = pmCount + 1; setPmCount(n);
+      const longNext = n % pomo.untilLong === 0;
+      setPmMode(longNext ? "long" : "short"); setPmSec((longNext ? pomo.long : pomo.short) * 60);
+      flash(pmSubj ? "Foco concluído! Tempo no histórico ☕" : "Foco concluído! Pausa ☕");
+    } else { setPmMode("focus"); setPmSec(pomo.focus * 60); flash("Pausa acabou! Bora focar 🎯"); }
+  };
+  useEffect(() => { if (pmOn && pmSec === 0) pomoTransition(); }, [pmSec, pmOn]); // eslint-disable-line
+  const pmReset = () => { setPmOn(false); setPmMode("focus"); setPmSec(pomo.focus * 60); };
+  const pmSetMode = (m) => { setPmOn(false); setPmMode(m); setPmSec((m === "focus" ? pomo.focus : m === "short" ? pomo.short : pomo.long) * 60); };
+
+  // ── Cronograma ──
+  const DOW = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+  const gerarCronograma = () => {
+    const subs = schSubs.length ? schSubs : subjects.map((s) => s.id);
+    if (!subs.length) { flash("Cadastre conteúdos primeiro"); return; }
+    if (!schDays.length) { flash("Escolha ao menos 1 dia"); return; }
+    const pool = [...subs].sort(() => Math.random() - 0.5);
+    let k = 0; const grid = {};
+    DOW.filter((d) => schDays.includes(d)).forEach((d) => { grid[d] = []; for (let b = 0; b < schBlocks; b++) { grid[d].push(pool[k % pool.length]); k++; } });
+    setSchedule({ grid, days: DOW.filter((d) => schDays.includes(d)), blocks: schBlocks, generatedAt: Date.now() });
+    flash("Cronograma gerado!");
+  };
+
   const resetAll = async () => {
     if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
-    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]); setColumns(DEFAULT_COLS);
+    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]); setColumns(DEFAULT_COLS); setSchedule(null);
     setSec(0); setTOn(false); setTP(false); setTText(""); setTAccum(0); setTStartedAt(null);
+    setPmOn(false); setPmMode("focus"); setPmSec(pomo.focus * 60); setPmCount(0);
     setConfirmReset(false); flash("Tudo resetado!");
   };
 
@@ -490,7 +539,7 @@ export default function EstudoFlow({ user }) {
 
   const cDIM = new Date(calY, calM+1, 0).getDate(), cFD = new Date(calY, calM, 1).getDay();
   const nav = (p) => { setPg(p); setSb(false); };
-  const menus = [{n:"Dashboard",i:LayoutDashboard},{n:"Conteúdos",i:BookOpen},{n:"Tarefas",i:ListTodo},{n:"Quadro",i:Columns3},{n:"Histórico",i:Clock},{n:"Relatórios",i:BarChart3},{n:"Configurações",i:Settings},{n:"Sobre",i:Info}];
+  const menus = [{n:"Dashboard",i:LayoutDashboard},{n:"Conteúdos",i:BookOpen},{n:"Tarefas",i:ListTodo},{n:"Quadro",i:Columns3},{n:"Pomodoro",i:Timer},{n:"Cronograma",i:CalendarRange},{n:"Conquistas",i:Trophy},{n:"Histórico",i:Clock},{n:"Relatórios",i:BarChart3},{n:"Configurações",i:Settings},{n:"Sobre",i:Info}];
 
   const BtnAct = ({ children, color, onClick, disabled }) => (
     <button onClick={onClick} disabled={disabled} className={`inline-flex items-center gap-1 px-3.5 py-2 rounded-lg ${color} text-white text-xs font-bold shadow-md transition hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed`}>{children}</button>
@@ -1031,6 +1080,151 @@ export default function EstudoFlow({ user }) {
                 </div>
               </div>
             )}
+
+            {/* POMODORO */}
+            {pg==="Pomodoro"&&(
+              <div className="max-w-md mx-auto space-y-4">
+                <div className={`${cd} rounded-2xl p-6 text-center`}>
+                  <div className="flex justify-center gap-1.5 mb-5">
+                    {[{k:'focus',l:'Foco'},{k:'short',l:'Pausa'},{k:'long',l:'Pausa longa'}].map((m)=>(
+                      <button key={m.k} onClick={()=>pmSetMode(m.k)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${pmMode===m.k?"bg-indigo-500 text-white shadow":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}>{m.l}</button>
+                    ))}
+                  </div>
+                  <p className="text-6xl md:text-7xl font-extrabold tracking-tight" style={{fontVariantNumeric:'tabular-nums',color:pmMode==='focus'?'#6366f1':'#10b981'}}>{pad(Math.floor(pmSec/60))}:{pad(pmSec%60)}</p>
+                  <p className={`text-xs ${mu} mt-1`}>{pmMode==='focus'?(pmOn?'● Focando':'Pronto para focar'):(pmOn?'☕ Em pausa':'Pausa')} · {pmCount} ciclos</p>
+                  <div className="flex justify-center gap-2 mt-5">
+                    {!pmOn
+                      ? <button onClick={()=>setPmOn(true)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-500 text-white font-bold text-sm shadow hover:brightness-110"><Play size={15}/>Iniciar</button>
+                      : <button onClick={()=>setPmOn(false)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-amber-500 text-white font-bold text-sm shadow hover:brightness-110"><Pause size={15}/>Pausar</button>}
+                    <button onClick={pmSkip} className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><SkipForward size={15}/>Pular</button>
+                    <button onClick={pmReset} className={`flex items-center justify-center px-3 py-2.5 rounded-xl text-sm font-bold ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><RotateCcw size={15}/></button>
+                  </div>
+                </div>
+                <div className={`${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2 flex items-center gap-1`}><Coffee size={11}/>Vincular a um conteúdo (lança no histórico ao concluir o foco)</p>
+                  <select value={pmSubj} onChange={(e)=>setPmSubj(e.target.value)} className={ip}><option value="">— Não registrar —</option>{subjects.map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                </div>
+                <div className={`${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Tempos (min)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[{k:'focus',l:'Foco'},{k:'short',l:'Pausa curta'},{k:'long',l:'Pausa longa'},{k:'untilLong',l:'Ciclos p/ pausa longa'}].map((f)=>(
+                      <div key={f.k}><label className={`text-[10px] ${mu} mb-0.5 block`}>{f.l}</label>
+                        <input type="number" min="1" value={pomo[f.k]} onChange={(e)=>{const v=Math.max(1,parseInt(e.target.value)||1); setPomo((p)=>({...p,[f.k]:v})); if(!pmOn&&((f.k==='focus'&&pmMode==='focus')||(f.k==='short'&&pmMode==='short')||(f.k==='long'&&pmMode==='long'))) setPmSec(v*60);}} className={ip}/>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CRONOGRAMA */}
+            {pg==="Cronograma"&&(
+              <div className="space-y-4">
+                <div className={`${cd} rounded-xl p-4`}>
+                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Gerar cronograma da semana</p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {DOW.map((d)=>(
+                      <button key={d} onClick={()=>setSchDays((p)=>p.includes(d)?p.filter((x)=>x!==d):[...p,d])} className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${schDays.includes(d)?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}>{d}</button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div><label className={`text-[10px] ${mu} mb-0.5 block`}>Blocos por dia</label><input type="number" min="1" max="8" value={schBlocks} onChange={(e)=>setSchBlocks(Math.max(1,Math.min(8,parseInt(e.target.value)||1)))} className={`${ip} w-28`}/></div>
+                    <button onClick={gerarCronograma} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-bold shadow"><Zap size={15}/>Gerar</button>
+                    {schedule&&<button onClick={()=>setSchedule(null)} className={`px-3 py-2.5 rounded-xl text-sm font-bold ${dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Limpar</button>}
+                  </div>
+                  <p className={`text-[10px] ${mu} mt-2`}>Distribui os conteúdos (sorteados) nos dias escolhidos.</p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {subjects.map((s)=>{const on=schSubs.includes(s.id); return (
+                      <button key={s.id} onClick={()=>setSchSubs((p)=>p.includes(s.id)?p.filter((x)=>x!==s.id):[...p,s.id])} className="text-[10px] font-semibold px-2 py-0.5 rounded-full border transition" style={on?{background:s.color,color:'#fff',borderColor:s.color}:{borderColor:s.color,color:s.color}}>{s.name}</button>
+                    );})}
+                  </div>
+                  {schSubs.length>0&&<p className={`text-[9px] ${mu} mt-1`}>{schSubs.length} selecionados (vazio = todos)</p>}
+                </div>
+                {schedule?(
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {schedule.days.map((d)=>(
+                      <div key={d} className={`${cd} rounded-xl p-3`}>
+                        <p className={`text-[12px] font-bold ${tx} mb-2`}>{d}</p>
+                        <div className="space-y-1.5">
+                          {schedule.grid[d].map((sid,i)=>{const s=gS(sid); const Ic=s?gI(s.icon):BookOpen; return (
+                            <div key={i} className="flex items-center gap-2 p-2 rounded-lg" style={{background:(s?s.color:'#888')+"15"}}>
+                              <Ic size={13} style={{color:s?s.color:'#888'}}/>
+                              <span className={`text-[11px] font-semibold ${tx} truncate`}>{s?s.name:"—"}</span>
+                            </div>
+                          );})}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ):(
+                  <div className={`${cd} rounded-xl p-10 text-center`}>
+                    <CalendarRange size={32} className={`mx-auto mb-2 ${mu}`}/>
+                    <p className={`text-sm font-bold ${tx}`}>Nenhum cronograma ainda</p>
+                    <p className={`text-xs ${mu}`}>Escolha os dias e clique em Gerar 👆</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* CONQUISTAS (GAMIFICAÇÃO) */}
+            {pg==="Conquistas"&&(()=>{
+              const totalMin=records.reduce((a,r)=>a+r.duration,0); const totalH=totalMin/60;
+              const tasksDone=tasks.filter((t)=>t.status===lastCol()).length;
+              const daysActive=new Set(records.map((r)=>r.date)).size;
+              const xp=Math.round(totalMin+tasksDone*10+streak*15);
+              const level=Math.floor(Math.sqrt(xp/100))+1;
+              const xpThis=100*(level-1)*(level-1), xpNext=100*level*level;
+              const pctLvl=Math.min(100,Math.round((xp-xpThis)/(xpNext-xpThis)*100));
+              const ws=new Date(TODAY); ws.setDate(ws.getDate()-((ws.getDay()+6)%7)); const weStart=toK(ws); const we=new Date(ws); we.setDate(we.getDate()+6); const weEnd=toK(we);
+              const weekMin=records.filter((r)=>r.date>=weStart&&r.date<=weEnd).reduce((a,r)=>a+r.duration,0); const weekGoal=300;
+              const trophies=[
+                {ic:Flame,c:"#f59e0b",t:"Primeiro passo",d:"Registre 1 sessão",ok:records.length>=1,pr:Math.min(100,records.length*100)},
+                {ic:Clock,c:"#6366f1",t:"10 horas",d:"Acumule 10h",ok:totalH>=10,pr:Math.min(100,totalH/10*100)},
+                {ic:Star,c:"#8b5cf6",t:"50 horas",d:"Acumule 50h",ok:totalH>=50,pr:Math.min(100,totalH/50*100)},
+                {ic:Flame,c:"#ef4444",t:"Pegando fogo",d:"7 dias seguidos",ok:streak>=7,pr:Math.min(100,streak/7*100)},
+                {ic:CheckCircle2,c:"#10b981",t:"Produtivo",d:"Conclua 25 tarefas",ok:tasksDone>=25,pr:Math.min(100,tasksDone/25*100)},
+                {ic:CalendarDays,c:"#06b6d4",t:"Constância",d:"30 dias ativos",ok:daysActive>=30,pr:Math.min(100,daysActive/30*100)},
+              ];
+              return (
+                <div className="space-y-4 max-w-4xl">
+                  <div className="relative overflow-hidden rounded-2xl p-6 bg-gradient-to-br from-indigo-500 via-purple-600 to-fuchsia-600 text-white">
+                    <div className="absolute -top-12 -right-8 w-48 h-48 rounded-full bg-white/10 blur-3xl"/>
+                    <div className="relative flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur flex flex-col items-center justify-center flex-shrink-0"><Trophy size={20}/><span className="text-[10px] font-bold mt-0.5">Nv {level}</span></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-2xl font-extrabold">Nível {level}</p>
+                        <p className="text-white/80 text-xs mb-2">{xp} XP · faltam {Math.max(0,xpNext-xp)} XP para o nível {level+1}</p>
+                        <div className="w-full h-2 rounded-full bg-white/20"><div className="h-full rounded-full bg-white transition-all" style={{width:`${pctLvl}%`}}/></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[{l:"Tempo total",v:fmtDur(totalMin),i:Clock},{l:"Tarefas feitas",v:String(tasksDone),i:CheckCircle2},{l:"Sequência",v:streak+"d",i:Flame}].map((s,i)=>(
+                      <div key={i} className={`${cd} rounded-xl p-3 text-center`}><s.i size={16} className="mx-auto text-indigo-500 mb-1"/><p className={`text-sm font-extrabold ${tx}`}>{s.v}</p><p className={`text-[10px] ${mu}`}>{s.l}</p></div>
+                    ))}
+                  </div>
+                  <div className={`${cd} rounded-xl p-4`}>
+                    <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><Zap size={15} className="text-amber-500"/><p className={`text-sm font-bold ${tx}`}>Desafio da semana</p></div><span className={`text-[11px] font-bold ${weekMin>=weekGoal?"text-emerald-500":mu}`}>{fmtDur(weekMin)} / {fmtDur(weekGoal)}</span></div>
+                    <p className={`text-xs ${mu} mb-2`}>Estude 5 horas nesta semana {weekMin>=weekGoal&&"— concluído! 🎉"}</p>
+                    <div className={`w-full h-2 rounded-full ${dk?"bg-white/10":"bg-gray-200"}`}><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all" style={{width:`${Math.min(100,Math.round(weekMin/weekGoal*100))}%`}}/></div>
+                  </div>
+                  <div>
+                    <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Troféus</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {trophies.map((tr,i)=>(
+                        <div key={i} className={`${cd} rounded-xl p-3 ${tr.ok?"":"opacity-75"}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:tr.ok?tr.c+"22":(dk?"rgba(255,255,255,0.05)":"rgba(0,0,0,0.05)")}}>{tr.ok?<tr.ic size={17} style={{color:tr.c}}/>:<Lock size={15} className={mu}/>}</div>
+                            <div className="min-w-0"><p className={`text-[12px] font-bold ${tx} truncate`}>{tr.t}</p><p className={`text-[10px] ${mu} truncate`}>{tr.d}</p></div>
+                          </div>
+                          {tr.ok?<p className="text-[9px] font-bold text-emerald-500 mt-0.5">✓ Conquistado</p>:<div className={`w-full h-1 rounded-full mt-1 ${dk?"bg-white/10":"bg-gray-200"}`}><div className="h-full rounded-full" style={{width:`${tr.pr}%`,background:tr.c}}/></div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* SOBRE */}
             {pg==="Sobre"&&(
