@@ -32,7 +32,7 @@ const CATS = [
   { id: "leituras", label: "Leituras", icon: BookMarked, color: "#f59e0b" },
 ];
 const PRIOS = { alta: { l: "Alta", c: "#ef4444" }, media: { l: "Média", c: "#f59e0b" }, baixa: { l: "Baixa", c: "#10b981" } };
-const KCOLS = [{ k: "todo", l: "A Fazer", c: "#6366f1" }, { k: "doing", l: "Fazendo", c: "#f59e0b" }, { k: "done", l: "Concluído", c: "#10b981" }];
+const DEFAULT_COLS = [{ id: "todo", label: "A Fazer", color: "#6366f1" }, { id: "doing", label: "Fazendo", color: "#f59e0b" }, { id: "done", label: "Concluído", color: "#10b981" }];
 const ICO = [
   { n: "Beaker", c: Beaker },{ n: "Globe", c: Globe },{ n: "Calculator", c: Calculator },
   { n: "Atom", c: Atom },{ n: "Pen", c: Pen },{ n: "BookMarked", c: BookMarked },
@@ -107,6 +107,7 @@ export default function EstudoFlow({ user }) {
   const [records, setRecords] = useState([]);
   const [goals, setGoals] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [columns, setColumns] = useState(DEFAULT_COLS);
   const [profile, setProfile] = useState(defaultProfile);
   const [notif, setNotif] = useState(null);
 
@@ -128,6 +129,7 @@ export default function EstudoFlow({ user }) {
         setRecords(d.records || []);
         setGoals(d.goals || []);
         setTasks(d.tasks || []);
+        setColumns(d.columns && d.columns.length ? d.columns : DEFAULT_COLS);
         setProfile(d.profile || defaultProfile);
         if (typeof d.dark === "boolean") setDk(d.dark);
       } else {
@@ -136,7 +138,7 @@ export default function EstudoFlow({ user }) {
         setSubjects(seed);
         setPg("Sobre");
         // cria a linha do usuário já no 1º acesso → nas próximas vezes cai no Dashboard
-        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], profile: defaultProfile, dark: dk }).catch(() => {});
+        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], columns: DEFAULT_COLS, profile: defaultProfile, dark: dk }).catch(() => {});
       }
       setLoaded(true);
     }).catch(() => {
@@ -158,11 +160,11 @@ export default function EstudoFlow({ user }) {
     clearTimeout(saveRef.current);
     setSyncStatus("saving");
     saveRef.current = setTimeout(() => {
-      saveUserData(user.id, { subjects, records, goals, tasks, profile, dark: dk })
+      saveUserData(user.id, { subjects, records, goals, tasks, columns, profile, dark: dk })
         .then(() => setSyncStatus("saved"))
         .catch(() => setSyncStatus("error"));
     }, 1200);
-  }, [subjects, records, goals, tasks, profile, dk, loaded, user.id]);
+  }, [subjects, records, goals, tasks, columns, profile, dk, loaded, user.id]);
 
   const [tText, setTText] = useState("");
   const [tCat, setTCat] = useState("estudos");
@@ -191,6 +193,9 @@ export default function EstudoFlow({ user }) {
   const [quickTask, setQuickTask] = useState("");
   const [taskFilter, setTaskFilter] = useState("all");
   const [dragId, setDragId] = useState(null);
+  const [colId, setColId] = useState("");
+  const [colLabel, setColLabel] = useState("");
+  const [colColor, setColColor] = useState("#6366f1");
   const [mDate, smDate] = useState("");
   const [mSub, smSub] = useState("");
   const [mDur, smDur] = useState("60");
@@ -296,24 +301,28 @@ export default function EstudoFlow({ user }) {
   const delSub = (id) => { setSubjects((p) => p.filter((s) => s.id !== id)); setRecords((p) => p.filter((r) => r.subjectId !== id)); flash("Conteúdo removido"); };
   const delGoal = (id) => { setGoals((p) => p.filter((g) => g.id !== id)); flash("Meta removida"); };
 
-  // ── Tarefas / Kanban ──
-  const addTask = (title, status = "todo") => {
+  // ── Tarefas / Kanban (colunas dinâmicas) ──
+  const firstCol = () => columns[0]?.id || "todo";
+  const lastCol = () => columns[columns.length - 1]?.id || "done";
+  const colOf = (id) => columns.find((c) => c.id === id) || columns[0] || DEFAULT_COLS[0];
+
+  const addTask = (title, status) => {
     if (!title.trim()) return;
-    setTasks((p) => [...p, { id: uid(), title: title.trim(), notes: "", status, priority: "media", due: "", subjectId: "", createdAt: Date.now() }]);
+    setTasks((p) => [...p, { id: uid(), title: title.trim(), notes: "", status: status || firstCol(), priority: "media", due: "", subjectId: "", createdAt: Date.now() }]);
     flash("Tarefa criada!");
   };
   const updTask = (id, patch) => setTasks((p) => p.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   const delTask = (id) => { setTasks((p) => p.filter((t) => t.id !== id)); flash("Tarefa removida"); };
   const moveTask = (id, dir) => {
-    const order = ["todo", "doing", "done"];
+    const order = columns.map((c) => c.id);
     setTasks((p) => p.map((t) => {
       if (t.id !== id) return t;
       const i = Math.min(order.length - 1, Math.max(0, order.indexOf(t.status) + dir));
       return { ...t, status: order[i] };
     }));
   };
-  const openAddTask = (status = "todo") => { setTkId(""); setTkTitle(""); setTkNotes(""); setTkPrio("media"); setTkDue(""); setTkSubj(""); setTkStatus(status); setMt("task"); };
-  const openEditTask = (t) => { setTkId(t.id); setTkTitle(t.title); setTkNotes(t.notes || ""); setTkPrio(t.priority || "media"); setTkDue(t.due || ""); setTkSubj(t.subjectId || ""); setTkStatus(t.status || "todo"); setMt("task"); };
+  const openAddTask = (status) => { setTkId(""); setTkTitle(""); setTkNotes(""); setTkPrio("media"); setTkDue(""); setTkSubj(""); setTkStatus(status || firstCol()); setMt("task"); };
+  const openEditTask = (t) => { setTkId(t.id); setTkTitle(t.title); setTkNotes(t.notes || ""); setTkPrio(t.priority || "media"); setTkDue(t.due || ""); setTkSubj(t.subjectId || ""); setTkStatus(t.status || firstCol()); setMt("task"); };
   const saveTask = () => {
     if (!tkTitle.trim()) return;
     const d = { title: tkTitle.trim(), notes: tkNotes, priority: tkPrio, due: tkDue, subjectId: tkSubj, status: tkStatus };
@@ -322,9 +331,26 @@ export default function EstudoFlow({ user }) {
     cl();
   };
 
+  // ── Colunas/Status personalizados ──
+  const openAddCol = () => { setColId(""); setColLabel(""); setColColor(COLS[columns.length % COLS.length]); setMt("col"); };
+  const openEditCol = (c) => { setColId(c.id); setColLabel(c.label); setColColor(c.color); setMt("col"); };
+  const saveCol = () => {
+    if (!colLabel.trim()) return;
+    if (colId) { setColumns((p) => p.map((c) => (c.id === colId ? { ...c, label: colLabel.trim(), color: colColor } : c))); flash("Status atualizado!"); }
+    else { setColumns((p) => [...p, { id: uid(), label: colLabel.trim(), color: colColor }]); flash("Status criado!"); }
+    cl();
+  };
+  const delCol = (id) => {
+    if (columns.length <= 1) { flash("Precisa de ao menos 1 status"); return; }
+    const fb = columns.find((c) => c.id !== id).id;
+    setTasks((p) => p.map((t) => (t.status === id ? { ...t, status: fb } : t)));
+    setColumns((p) => p.filter((c) => c.id !== id));
+    flash("Status removido");
+  };
+
   const resetAll = async () => {
     if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
-    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]);
+    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]); setColumns(DEFAULT_COLS);
     setSec(0); setTOn(false); setTP(false); setTText(""); setTAccum(0); setTStartedAt(null);
     setConfirmReset(false); flash("Tudo resetado!");
   };
@@ -828,22 +854,22 @@ export default function EstudoFlow({ user }) {
                   <button onClick={()=>openAddTask()} className={`flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold flex-shrink-0 ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Edit3 size={13}/>Detalhada</button>
                 </div>
                 <div className="flex flex-wrap gap-1.5 items-center">
-                  {[{k:"all",l:"Todas"},{k:"todo",l:"A Fazer"},{k:"doing",l:"Fazendo"},{k:"done",l:"Concluídas"}].map((f)=>(
+                  {[{k:"all",l:"Todas"},...columns.map((c)=>({k:c.id,l:c.label}))].map((f)=>(
                     <button key={f.k} onClick={()=>setTaskFilter(f.k)} className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${taskFilter===f.k?"bg-indigo-500 text-white shadow":mu}`}>{f.l}</button>
                   ))}
-                  <span className={`text-[10px] ${mu} ml-auto`}>{tasks.length} tarefas · {tasks.filter((t)=>t.status==='done').length} concluídas</span>
+                  <span className={`text-[10px] ${mu} ml-auto`}>{tasks.length} tarefas · {tasks.filter((t)=>t.status===lastCol()).length} concluídas</span>
                 </div>
                 <div className="space-y-2">
-                  {tasks.filter((t)=>taskFilter==='all'||t.status===taskFilter).sort((a,b)=>{const pr={alta:0,media:1,baixa:2}; return ((a.status==='done')-(b.status==='done'))||((pr[a.priority]??1)-(pr[b.priority]??1));}).map((t)=>{
-                    const s=t.subjectId?gS(t.subjectId):null; const done=t.status==='done'; const overdue=t.due&&t.due<toK(TODAY)&&!done; const st=KCOLS.find((c)=>c.k===t.status)||KCOLS[0];
+                  {tasks.filter((t)=>taskFilter==='all'||t.status===taskFilter).sort((a,b)=>{const pr={alta:0,media:1,baixa:2}; return ((a.status===lastCol())-(b.status===lastCol()))||((pr[a.priority]??1)-(pr[b.priority]??1));}).map((t)=>{
+                    const s=t.subjectId?gS(t.subjectId):null; const done=t.status===lastCol(); const overdue=t.due&&t.due<toK(TODAY)&&!done; const st=colOf(t.status);
                     return (
                       <div key={t.id} className={`${cd} rounded-xl p-3 flex items-center gap-3 group`}>
-                        <button onClick={()=>updTask(t.id,{status:done?'todo':'done'})} className="flex-shrink-0">{done?<CheckCircle2 size={20} className="text-emerald-500"/>:<Circle size={20} className={mu}/>}</button>
+                        <button onClick={()=>updTask(t.id,{status:done?firstCol():lastCol()})} className="flex-shrink-0">{done?<CheckCircle2 size={20} className="text-emerald-500"/>:<Circle size={20} className={mu}/>}</button>
                         <div className="flex-1 min-w-0">
                           <p className={`text-[13px] font-semibold truncate ${done?"line-through "+mu:tx}`}>{t.title}</p>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{background:(PRIOS[t.priority]||PRIOS.media).c+"22",color:(PRIOS[t.priority]||PRIOS.media).c}}>{(PRIOS[t.priority]||PRIOS.media).l}</span>
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{background:st.c+"22",color:st.c}}>{st.l}</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{background:st.color+"22",color:st.color}}>{st.label}</span>
                             {t.due&&<span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${overdue?"bg-red-500/15 text-red-500":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><CalendarDays size={9}/>{t.due.split("-").reverse().join("/")}</span>}
                             {s&&<span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-1" style={{background:s.color+"18",color:s.color}}><span className="w-1.5 h-1.5 rounded-full" style={{background:s.color}}/>{s.name}</span>}
                           </div>
@@ -871,34 +897,41 @@ export default function EstudoFlow({ user }) {
               <div className="space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <p className={`text-xs ${mu}`}>Arraste os cards entre as colunas (ou use as setas ◂ ▸ no celular).</p>
-                  <button onClick={()=>openAddTask("todo")} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Nova tarefa</button>
+                  <div className="flex gap-2">
+                    <button onClick={openAddCol} className={`flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Columns3 size={14}/>Novo status</button>
+                    <button onClick={()=>openAddTask()} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Nova tarefa</button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {KCOLS.map((col)=>{
-                    const items=tasks.filter((t)=>t.status===col.k); const ci=KCOLS.findIndex((c)=>c.k===col.k);
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {columns.map((col)=>{
+                    const items=tasks.filter((t)=>t.status===col.id); const ci=columns.findIndex((c)=>c.id===col.id);
                     return (
-                      <div key={col.k} onDragOver={(e)=>e.preventDefault()} onDrop={()=>{if(dragId){updTask(dragId,{status:col.k});setDragId(null);}}} className={`rounded-xl p-3 min-h-[140px] ${dk?"bg-white/[0.03] border border-white/[0.06]":"bg-gray-100/70 border border-gray-200/60"}`}>
+                      <div key={col.id} onDragOver={(e)=>e.preventDefault()} onDrop={()=>{if(dragId){updTask(dragId,{status:col.id});setDragId(null);}}} className={`group rounded-xl p-3 min-h-[140px] w-[270px] flex-shrink-0 ${dk?"bg-white/[0.03] border border-white/[0.06]":"bg-gray-100/70 border border-gray-200/60"}`}>
                         <div className="flex items-center justify-between mb-3 px-1">
-                          <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{background:col.c}}/><p className={`text-[12px] font-bold ${tx}`}>{col.l}</p><span className={`text-[10px] ${mu}`}>{items.length}</span></div>
-                          <button onClick={()=>openAddTask(col.k)} className={`p-1 rounded ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><Plus size={14}/></button>
+                          <div className="flex items-center gap-2 min-w-0"><span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:col.color}}/><p className={`text-[12px] font-bold ${tx} truncate`}>{col.label}</p><span className={`text-[10px] ${mu} flex-shrink-0`}>{items.length}</span></div>
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <button onClick={()=>openAddTask(col.id)} title="Nova tarefa" className={`p-1 rounded ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><Plus size={14}/></button>
+                            <button onClick={()=>openEditCol(col)} title="Editar status" className={`p-1 rounded opacity-0 group-hover:opacity-100 transition ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><Edit3 size={12}/></button>
+                            <button onClick={()=>delCol(col.id)} title="Excluir status" className="p-1 rounded opacity-0 group-hover:opacity-100 transition hover:bg-red-500/10 text-red-400"><Trash2 size={12}/></button>
+                          </div>
                         </div>
                         <div className="space-y-2">
                           {items.map((t)=>{
-                            const s=t.subjectId?gS(t.subjectId):null; const overdue=t.due&&t.due<toK(TODAY)&&col.k!=='done';
+                            const s=t.subjectId?gS(t.subjectId):null; const overdue=t.due&&t.due<toK(TODAY)&&col.id!==lastCol();
                             return (
-                              <div key={t.id} draggable onDragStart={()=>setDragId(t.id)} onDragEnd={()=>setDragId(null)} className={`rounded-lg p-3 cursor-grab active:cursor-grabbing group ${dk?"bg-gray-900 border border-white/10":"bg-white border border-gray-200 shadow-sm"} ${dragId===t.id?"opacity-40":""}`} style={{borderLeft:`3px solid ${(PRIOS[t.priority]||PRIOS.media).c}`}}>
+                              <div key={t.id} draggable onDragStart={()=>setDragId(t.id)} onDragEnd={()=>setDragId(null)} className={`rounded-lg p-3 cursor-grab active:cursor-grabbing group/card ${dk?"bg-gray-900 border border-white/10":"bg-white border border-gray-200 shadow-sm"} ${dragId===t.id?"opacity-40":""}`} style={{borderLeft:`3px solid ${(PRIOS[t.priority]||PRIOS.media).c}`}}>
                                 <div className="flex items-start gap-1.5">
                                   <GripVertical size={13} className={`${mu} mt-0.5 flex-shrink-0 hidden md:block`}/>
-                                  <p className={`text-[12px] font-semibold leading-snug flex-1 ${col.k==='done'?"line-through "+mu:tx}`}>{t.title}</p>
+                                  <p className={`text-[12px] font-semibold leading-snug flex-1 ${col.id===lastCol()?"line-through "+mu:tx}`}>{t.title}</p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-1 mt-2">
                                   <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{background:(PRIOS[t.priority]||PRIOS.media).c+"22",color:(PRIOS[t.priority]||PRIOS.media).c}}>{(PRIOS[t.priority]||PRIOS.media).l}</span>
                                   {t.due&&<span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${overdue?"bg-red-500/15 text-red-500":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><CalendarDays size={8}/>{t.due.split("-").reverse().join("/")}</span>}
                                   {s&&<span className="text-[8px] font-semibold px-1.5 py-0.5 rounded-full" style={{background:s.color+"18",color:s.color}}>{s.name.length>12?s.name.slice(0,12)+"…":s.name}</span>}
                                 </div>
-                                <div className="flex items-center gap-0.5 mt-2 pt-2 border-t border-dashed opacity-60 group-hover:opacity-100 transition" style={{borderColor:dk?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.08)"}}>
+                                <div className="flex items-center gap-0.5 mt-2 pt-2 border-t border-dashed opacity-60 group-hover/card:opacity-100 transition" style={{borderColor:dk?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.08)"}}>
                                   <button disabled={ci===0} onClick={()=>moveTask(t.id,-1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronLeft size={13} className={mu}/></button>
-                                  <button disabled={ci===2} onClick={()=>moveTask(t.id,1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronRight size={13} className={mu}/></button>
+                                  <button disabled={ci===columns.length-1} onClick={()=>moveTask(t.id,1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronRight size={13} className={mu}/></button>
                                   <button onClick={()=>openEditTask(t)} className={`p-1 rounded ml-auto ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
                                   <button onClick={()=>delTask(t.id)} className="p-1 rounded hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
                                 </div>
@@ -910,6 +943,7 @@ export default function EstudoFlow({ user }) {
                       </div>
                     );
                   })}
+                  <button onClick={openAddCol} className={`flex-shrink-0 w-[120px] rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 text-xs font-bold transition self-start min-h-[140px] ${dk?"border-white/10 text-gray-400 hover:bg-white/5":"border-gray-300 text-gray-500 hover:bg-gray-50"}`}><Plus size={20}/>Novo status</button>
                 </div>
               </div>
             )}
@@ -1054,7 +1088,7 @@ export default function EstudoFlow({ user }) {
       <Mdl open={mt==="task"} onClose={cl} title={tkId?"Editar Tarefa":"Nova Tarefa"} dk={dk}>
         <div className="space-y-2.5">
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Título</label><input value={tkTitle} onChange={(e)=>setTkTitle(e.target.value)} className={ip} placeholder="Ex: Revisar capítulo 3" autoFocus/></div>
-          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Status</label><select value={tkStatus} onChange={(e)=>setTkStatus(e.target.value)} className={ip}>{KCOLS.map((c)=><option key={c.k} value={c.k}>{c.l}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Status</label><select value={tkStatus} onChange={(e)=>setTkStatus(e.target.value)} className={ip}>{columns.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
           <div className="grid grid-cols-2 gap-2">
             <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Prioridade</label><select value={tkPrio} onChange={(e)=>setTkPrio(e.target.value)} className={ip}><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></div>
             <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Prazo</label><input type="date" value={tkDue} onChange={(e)=>setTkDue(e.target.value)} className={ip}/></div>
@@ -1062,6 +1096,19 @@ export default function EstudoFlow({ user }) {
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Conteúdo (opcional)</label><select value={tkSubj} onChange={(e)=>setTkSubj(e.target.value)} className={ip}><option value="">— Nenhum —</option>{subjects.map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Notas</label><input value={tkNotes} onChange={(e)=>setTkNotes(e.target.value)} className={ip} placeholder="Opcional..."/></div>
           <button onClick={saveTask} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{tkId?"Salvar":"Criar"}</button>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="col"} onClose={cl} title={colId?"Editar Status":"Novo Status"} dk={dk}>
+        <div className="space-y-2.5">
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome do status</label><input value={colLabel} onChange={(e)=>setColLabel(e.target.value)} className={ip} placeholder="Ex: Revisar, Em pausa, Urgente..." autoFocus/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Cor</label><div className="flex gap-1.5 flex-wrap">{COLS.map((c)=><button key={c} onClick={()=>setColColor(c)} className={`w-6 h-6 rounded-md transition ${colColor===c?"scale-110 ring-2 ring-offset-1 ring-indigo-500":""}`} style={{background:c}}/>)}</div></div>
+          <div className={`rounded-lg p-2.5 flex items-center gap-2 ${dk?"bg-white/[0.04]":"bg-gray-50"}`}>
+            <span className="w-2.5 h-2.5 rounded-full" style={{background:colColor}}/>
+            <span className={`text-[12px] font-bold ${tx}`}>{colLabel||"Pré-visualização"}</span>
+          </div>
+          <button onClick={saveCol} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{colId?"Salvar":"Criar status"}</button>
+          {colId && columns.length>1 && <button onClick={()=>{delCol(colId);cl();}} className="w-full py-2 rounded-xl bg-red-500/10 text-red-500 font-bold text-xs flex items-center justify-center gap-1.5"><Trash2 size={13}/>Excluir este status</button>}
         </div>
       </Mdl>
 
