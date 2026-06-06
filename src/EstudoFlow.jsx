@@ -11,7 +11,8 @@ import {
   Code, Palette, Heart, Mountain, Bike, Target, BarChart3, RotateCcw,
   Download, Upload, Printer, Award, Wifi, WifiOff, Database, LogOut, KeyRound,
   Info, Sparkles, GraduationCap, Users, Rocket, Cloud,
-  ListTodo, Columns3, GripVertical, Circle, CheckCircle2, Flag, ArrowRight, CalendarDays
+  ListTodo, Columns3, GripVertical, Circle, CheckCircle2, Flag, ArrowRight, CalendarDays,
+  Repeat, Hourglass
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { loadUserData, saveUserData } from "./data";
@@ -196,6 +197,11 @@ export default function EstudoFlow({ user }) {
   const [colId, setColId] = useState("");
   const [colLabel, setColLabel] = useState("");
   const [colColor, setColColor] = useState("#6366f1");
+  const [tkRec, setTkRec] = useState("none");
+  const [tkEst, setTkEst] = useState("");
+  const [tkUsed, setTkUsed] = useState("");
+  const [tkChecklist, setTkChecklist] = useState([]);
+  const [tkNewItem, setTkNewItem] = useState("");
   const [mDate, smDate] = useState("");
   const [mSub, smSub] = useState("");
   const [mDur, smDur] = useState("60");
@@ -308,28 +314,78 @@ export default function EstudoFlow({ user }) {
 
   const addTask = (title, status) => {
     if (!title.trim()) return;
-    setTasks((p) => [...p, { id: uid(), title: title.trim(), notes: "", status: status || firstCol(), priority: "media", due: "", subjectId: "", createdAt: Date.now() }]);
+    setTasks((p) => [...p, { id: uid(), title: title.trim(), notes: "", status: status || firstCol(), priority: "media", due: "", subjectId: "", recurrence: "none", checklist: [], estMin: "", usedMin: "", createdAt: Date.now() }]);
     flash("Tarefa criada!");
   };
   const updTask = (id, patch) => setTasks((p) => p.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   const delTask = (id) => { setTasks((p) => p.filter((t) => t.id !== id)); flash("Tarefa removida"); };
-  const moveTask = (id, dir) => {
-    const order = columns.map((c) => c.id);
-    setTasks((p) => p.map((t) => {
-      if (t.id !== id) return t;
-      const i = Math.min(order.length - 1, Math.max(0, order.indexOf(t.status) + dir));
-      return { ...t, status: order[i] };
-    }));
+
+  const addRecurrence = (dateStr, rec) => {
+    if (!dateStr) return "";
+    const d = pK(dateStr);
+    if (rec === "daily") d.setDate(d.getDate() + 1);
+    else if (rec === "weekly") d.setDate(d.getDate() + 7);
+    else if (rec === "monthly") d.setMonth(d.getMonth() + 1);
+    return toK(d);
   };
-  const openAddTask = (status) => { setTkId(""); setTkTitle(""); setTkNotes(""); setTkPrio("media"); setTkDue(""); setTkSubj(""); setTkStatus(status || firstCol()); setMt("task"); };
-  const openEditTask = (t) => { setTkId(t.id); setTkTitle(t.title); setTkNotes(t.notes || ""); setTkPrio(t.priority || "media"); setTkDue(t.due || ""); setTkSubj(t.subjectId || ""); setTkStatus(t.status || firstCol()); setMt("task"); };
+  const logTaskTime = (task) => {
+    const mins = parseInt(task.usedMin || task.estMin || 0) || 0;
+    if (mins > 0) {
+      setRecords((p) => [...p, { id: uid(), subjectId: task.subjectId || "", date: toK(TODAY), duration: mins, notes: "Tarefa: " + task.title }]);
+    }
+  };
+  // Muda o status tratando conclusão (última coluna): registra tempo no histórico e regenera recorrentes
+  const setTaskStatus = (task, newStatus) => {
+    const wasDone = task.status === lastCol();
+    const willDone = newStatus === lastCol();
+    if (willDone && !wasDone && !task.logged) {
+      logTaskTime(task);
+      if (task.recurrence && task.recurrence !== "none") {
+        const nextDue = addRecurrence(task.due, task.recurrence);
+        setTasks((p) => p.map((t) => (t.id === task.id ? { ...t, status: firstCol(), logged: false, due: nextDue, checklist: (t.checklist || []).map((c) => ({ ...c, done: false })) } : t)));
+        flash("Concluída! Próxima ocorrência gerada 🔁");
+        return;
+      }
+      setTasks((p) => p.map((t) => (t.id === task.id ? { ...t, status: newStatus, logged: true } : t)));
+      flash(parseInt(task.usedMin || task.estMin || 0) > 0 ? "Concluída! Tempo lançado no histórico ✓" : "Tarefa concluída!");
+      return;
+    }
+    const patch = !willDone && wasDone ? { status: newStatus, logged: false } : { status: newStatus };
+    setTasks((p) => p.map((t) => (t.id === task.id ? { ...t, ...patch } : t)));
+  };
+  const moveTask = (task, dir) => {
+    const order = columns.map((c) => c.id);
+    const i = Math.min(order.length - 1, Math.max(0, order.indexOf(task.status) + dir));
+    setTaskStatus(task, order[i]);
+  };
+  const moveCol = (id, dir) => {
+    setColumns((p) => {
+      const i = p.findIndex((c) => c.id === id); const j = i + dir;
+      if (i < 0 || j < 0 || j >= p.length) return p;
+      const n = [...p]; [n[i], n[j]] = [n[j], n[i]]; return n;
+    });
+  };
+  const openAddTask = (status) => { setTkId(""); setTkTitle(""); setTkNotes(""); setTkPrio("media"); setTkDue(""); setTkSubj(""); setTkStatus(status || firstCol()); setTkRec("none"); setTkEst(""); setTkUsed(""); setTkChecklist([]); setTkNewItem(""); setMt("task"); };
+  const openEditTask = (t) => { setTkId(t.id); setTkTitle(t.title); setTkNotes(t.notes || ""); setTkPrio(t.priority || "media"); setTkDue(t.due || ""); setTkSubj(t.subjectId || ""); setTkStatus(t.status || firstCol()); setTkRec(t.recurrence || "none"); setTkEst(t.estMin || ""); setTkUsed(t.usedMin || ""); setTkChecklist(t.checklist || []); setTkNewItem(""); setMt("task"); };
   const saveTask = () => {
     if (!tkTitle.trim()) return;
-    const d = { title: tkTitle.trim(), notes: tkNotes, priority: tkPrio, due: tkDue, subjectId: tkSubj, status: tkStatus };
-    if (tkId) { updTask(tkId, d); flash("Tarefa atualizada!"); }
-    else { setTasks((p) => [...p, { id: uid(), createdAt: Date.now(), ...d }]); flash("Tarefa criada!"); }
+    const d = { title: tkTitle.trim(), notes: tkNotes, priority: tkPrio, due: tkDue, subjectId: tkSubj, recurrence: tkRec, estMin: tkEst, usedMin: tkUsed, checklist: tkChecklist };
+    if (tkId) {
+      const existing = tasks.find((t) => t.id === tkId);
+      updTask(tkId, d);
+      if (existing && tkStatus !== existing.status) setTaskStatus({ ...existing, ...d }, tkStatus);
+      else updTask(tkId, { status: tkStatus });
+      flash("Tarefa atualizada!");
+    } else {
+      setTasks((p) => [...p, { id: uid(), createdAt: Date.now(), status: tkStatus, ...d }]);
+      flash("Tarefa criada!");
+    }
     cl();
   };
+  // checklist helpers (dentro do modal)
+  const addChkItem = () => { if (!tkNewItem.trim()) return; setTkChecklist((p) => [...p, { id: uid(), text: tkNewItem.trim(), done: false }]); setTkNewItem(""); };
+  const toggleChkItem = (id) => setTkChecklist((p) => p.map((c) => (c.id === id ? { ...c, done: !c.done } : c)));
+  const delChkItem = (id) => setTkChecklist((p) => p.filter((c) => c.id !== id));
 
   // ── Colunas/Status personalizados ──
   const openAddCol = () => { setColId(""); setColLabel(""); setColColor(COLS[columns.length % COLS.length]); setMt("col"); };
@@ -864,7 +920,7 @@ export default function EstudoFlow({ user }) {
                     const s=t.subjectId?gS(t.subjectId):null; const done=t.status===lastCol(); const overdue=t.due&&t.due<toK(TODAY)&&!done; const st=colOf(t.status);
                     return (
                       <div key={t.id} className={`${cd} rounded-xl p-3 flex items-center gap-3 group`}>
-                        <button onClick={()=>updTask(t.id,{status:done?firstCol():lastCol()})} className="flex-shrink-0">{done?<CheckCircle2 size={20} className="text-emerald-500"/>:<Circle size={20} className={mu}/>}</button>
+                        <button onClick={()=>setTaskStatus(t,done?firstCol():lastCol())} className="flex-shrink-0">{done?<CheckCircle2 size={20} className="text-emerald-500"/>:<Circle size={20} className={mu}/>}</button>
                         <div className="flex-1 min-w-0">
                           <p className={`text-[13px] font-semibold truncate ${done?"line-through "+mu:tx}`}>{t.title}</p>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -872,6 +928,9 @@ export default function EstudoFlow({ user }) {
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{background:st.color+"22",color:st.color}}>{st.label}</span>
                             {t.due&&<span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${overdue?"bg-red-500/15 text-red-500":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><CalendarDays size={9}/>{t.due.split("-").reverse().join("/")}</span>}
                             {s&&<span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-1" style={{background:s.color+"18",color:s.color}}><span className="w-1.5 h-1.5 rounded-full" style={{background:s.color}}/>{s.name}</span>}
+                            {t.recurrence&&t.recurrence!=='none'&&<span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 bg-indigo-500/15 text-indigo-500"><Repeat size={9}/>{({daily:'Diária',weekly:'Semanal',monthly:'Mensal'})[t.recurrence]}</span>}
+                            {t.checklist&&t.checklist.length>0&&<span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><CheckCircle2 size={9}/>{t.checklist.filter((c)=>c.done).length}/{t.checklist.length}</span>}
+                            {(t.usedMin||t.estMin)&&<span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><Hourglass size={9}/>{t.usedMin?fmtDur(parseInt(t.usedMin)):"~"+fmtDur(parseInt(t.estMin))}</span>}
                           </div>
                         </div>
                         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
@@ -906,10 +965,12 @@ export default function EstudoFlow({ user }) {
                   {columns.map((col)=>{
                     const items=tasks.filter((t)=>t.status===col.id); const ci=columns.findIndex((c)=>c.id===col.id);
                     return (
-                      <div key={col.id} onDragOver={(e)=>e.preventDefault()} onDrop={()=>{if(dragId){updTask(dragId,{status:col.id});setDragId(null);}}} className={`group rounded-xl p-3 min-h-[140px] w-[270px] flex-shrink-0 ${dk?"bg-white/[0.03] border border-white/[0.06]":"bg-gray-100/70 border border-gray-200/60"}`}>
+                      <div key={col.id} onDragOver={(e)=>e.preventDefault()} onDrop={()=>{if(dragId){const tk=tasks.find((x)=>x.id===dragId); if(tk)setTaskStatus(tk,col.id); setDragId(null);}}} className={`group rounded-xl p-3 min-h-[140px] w-[270px] flex-shrink-0 ${dk?"bg-white/[0.03] border border-white/[0.06]":"bg-gray-100/70 border border-gray-200/60"}`}>
                         <div className="flex items-center justify-between mb-3 px-1">
                           <div className="flex items-center gap-2 min-w-0"><span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:col.color}}/><p className={`text-[12px] font-bold ${tx} truncate`}>{col.label}</p><span className={`text-[10px] ${mu} flex-shrink-0`}>{items.length}</span></div>
                           <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <button disabled={ci===0} onClick={()=>moveCol(col.id,-1)} title="Mover para a esquerda" className={`p-1 rounded opacity-0 group-hover:opacity-100 transition disabled:opacity-0 ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><ChevronLeft size={13}/></button>
+                            <button disabled={ci===columns.length-1} onClick={()=>moveCol(col.id,1)} title="Mover para a direita" className={`p-1 rounded opacity-0 group-hover:opacity-100 transition disabled:opacity-0 ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><ChevronRight size={13}/></button>
                             <button onClick={()=>openAddTask(col.id)} title="Nova tarefa" className={`p-1 rounded ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><Plus size={14}/></button>
                             <button onClick={()=>openEditCol(col)} title="Editar status" className={`p-1 rounded opacity-0 group-hover:opacity-100 transition ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><Edit3 size={12}/></button>
                             <button onClick={()=>delCol(col.id)} title="Excluir status" className="p-1 rounded opacity-0 group-hover:opacity-100 transition hover:bg-red-500/10 text-red-400"><Trash2 size={12}/></button>
@@ -927,11 +988,14 @@ export default function EstudoFlow({ user }) {
                                 <div className="flex flex-wrap items-center gap-1 mt-2">
                                   <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{background:(PRIOS[t.priority]||PRIOS.media).c+"22",color:(PRIOS[t.priority]||PRIOS.media).c}}>{(PRIOS[t.priority]||PRIOS.media).l}</span>
                                   {t.due&&<span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${overdue?"bg-red-500/15 text-red-500":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><CalendarDays size={8}/>{t.due.split("-").reverse().join("/")}</span>}
+                                  {t.recurrence&&t.recurrence!=='none'&&<span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 bg-indigo-500/15 text-indigo-500"><Repeat size={8}/></span>}
+                                  {t.checklist&&t.checklist.length>0&&<span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><CheckCircle2 size={8}/>{t.checklist.filter((c)=>c.done).length}/{t.checklist.length}</span>}
+                                  {(t.usedMin||t.estMin)&&<span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><Hourglass size={8}/>{t.usedMin?fmtDur(parseInt(t.usedMin)):"~"+fmtDur(parseInt(t.estMin))}</span>}
                                   {s&&<span className="text-[8px] font-semibold px-1.5 py-0.5 rounded-full" style={{background:s.color+"18",color:s.color}}>{s.name.length>12?s.name.slice(0,12)+"…":s.name}</span>}
                                 </div>
                                 <div className="flex items-center gap-0.5 mt-2 pt-2 border-t border-dashed opacity-60 group-hover/card:opacity-100 transition" style={{borderColor:dk?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.08)"}}>
-                                  <button disabled={ci===0} onClick={()=>moveTask(t.id,-1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronLeft size={13} className={mu}/></button>
-                                  <button disabled={ci===columns.length-1} onClick={()=>moveTask(t.id,1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronRight size={13} className={mu}/></button>
+                                  <button disabled={ci===0} onClick={()=>moveTask(t,-1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronLeft size={13} className={mu}/></button>
+                                  <button disabled={ci===columns.length-1} onClick={()=>moveTask(t,1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronRight size={13} className={mu}/></button>
                                   <button onClick={()=>openEditTask(t)} className={`p-1 rounded ml-auto ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
                                   <button onClick={()=>delTask(t.id)} className="p-1 rounded hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
                                 </div>
@@ -1094,6 +1158,28 @@ export default function EstudoFlow({ user }) {
             <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Prazo</label><input type="date" value={tkDue} onChange={(e)=>setTkDue(e.target.value)} className={ip}/></div>
           </div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Conteúdo (opcional)</label><select value={tkSubj} onChange={(e)=>setTkSubj(e.target.value)} className={ip}><option value="">— Nenhum —</option>{subjects.map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block flex items-center gap-1`}><Repeat size={10}/>Repetir</label><select value={tkRec} onChange={(e)=>setTkRec(e.target.value)} className={ip}><option value="none">Não repetir</option><option value="daily">Diariamente</option><option value="weekly">Semanalmente</option><option value="monthly">Mensalmente</option></select></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Tempo estimado (min)</label><input type="number" min="0" value={tkEst} onChange={(e)=>setTkEst(e.target.value)} className={ip} placeholder="ex: 30"/></div>
+            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Tempo utilizado (min)</label><input type="number" min="0" value={tkUsed} onChange={(e)=>setTkUsed(e.target.value)} className={ip} placeholder="conta no histórico"/></div>
+          </div>
+          <p className={`text-[9px] ${mu} -mt-1`}>⏱️ Ao concluir a tarefa, o tempo utilizado (ou o estimado) é lançado no seu histórico.</p>
+          <div>
+            <label className={`text-[9px] ${mu} mb-0.5 block`}>Checklist</label>
+            <div className="space-y-1.5">
+              {tkChecklist.map((c)=>(
+                <div key={c.id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${dk?"bg-white/[0.04]":"bg-gray-50"}`}>
+                  <button onClick={()=>toggleChkItem(c.id)} className="flex-shrink-0">{c.done?<CheckCircle2 size={16} className="text-emerald-500"/>:<Circle size={16} className={mu}/>}</button>
+                  <span className={`text-[12px] flex-1 ${c.done?"line-through "+mu:tx}`}>{c.text}</span>
+                  <button onClick={()=>delChkItem(c.id)} className="flex-shrink-0 p-0.5 rounded hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <input value={tkNewItem} onChange={(e)=>setTkNewItem(e.target.value)} onKeyDown={(e)=>{if(e.key==='Enter'){e.preventDefault();addChkItem();}}} placeholder="Novo item + Enter..." className={`${ip} flex-1`}/>
+                <button onClick={addChkItem} className="px-3 rounded-xl bg-indigo-500 text-white flex items-center justify-center flex-shrink-0"><Plus size={14}/></button>
+              </div>
+            </div>
+          </div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Notas</label><input value={tkNotes} onChange={(e)=>setTkNotes(e.target.value)} className={ip} placeholder="Opcional..."/></div>
           <button onClick={saveTask} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{tkId?"Salvar":"Criar"}</button>
         </div>

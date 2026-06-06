@@ -51,8 +51,11 @@ pessoa tem sua própria conta e seus dados são totalmente isolados.
 
 ### ✅ Tarefas & Kanban (integrados)
 - **Lista de tarefas** com adição rápida (Enter), prioridade, prazo, vínculo a um conteúdo e filtros por status
-- **Quadro Kanban** estilo Trello: colunas **A Fazer / Fazendo / Concluído**
+- **Quadro Kanban** estilo Trello com **colunas/status personalizáveis** (criar, renomear, recolorir, **reordenar** e excluir quantos quiser)
 - **Arrastar e soltar** os cards entre colunas (desktop) + setas ◂ ▸ (celular)
+- **Tarefas recorrentes** (diária / semanal / mensal) — ao concluir, a próxima ocorrência é gerada
+- **Checklist** de subitens por tarefa
+- **Tempo estimado e utilizado** — ao concluir, o tempo é **lançado no histórico** e conta nos gráficos/contadores
 - Lista e quadro **compartilham os mesmos dados** — criou na lista, aparece no quadro
 
 ### 🕓 Histórico
