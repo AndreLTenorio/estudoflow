@@ -240,6 +240,10 @@ export default function EstudoFlow({ user }) {
   // Gerador por IA
   const [aiText, setAiText] = useState(""); const [aiDeckName, setAiDeckName] = useState(""); const [aiCount, setAiCount] = useState(8);
   const [aiBusy, setAiBusy] = useState(false); const [aiError, setAiError] = useState(""); const [aiResult, setAiResult] = useState(null);
+  // Chave de IA do próprio usuário (BYOK) — guardada só no navegador
+  const [aiKey, setAiKey] = useState(() => { try { return localStorage.getItem("ef_ai_key") || ""; } catch { return ""; } });
+  const [aiProvider, setAiProvider] = useState(() => { try { return localStorage.getItem("ef_ai_provider") || "gemini"; } catch { return "gemini"; } });
+  useEffect(() => { try { localStorage.setItem("ef_ai_key", aiKey); localStorage.setItem("ef_ai_provider", aiProvider); } catch { /* */ } }, [aiKey, aiProvider]);
   const [mDate, smDate] = useState("");
   const [mSub, smSub] = useState("");
   const [mDur, smDur] = useState("60");
@@ -512,10 +516,11 @@ export default function EstudoFlow({ user }) {
   };
   const openAI = () => { setAiText(""); setAiDeckName("IA — " + new Date().toLocaleDateString("pt-BR")); setAiCount(8); setAiError(""); setAiResult(null); setMt("ai"); };
   const gerarIA = async () => {
+    if (!aiKey.trim()) { setAiError("Adicione sua chave de IA em Configurações ▸ Inteligência Artificial."); return; }
     if (aiText.trim().length < 20) { setAiError("Cole um texto maior (mín. ~20 caracteres)."); return; }
     setAiBusy(true); setAiError(""); setAiResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke("ai-generate", { body: { text: aiText, count: parseInt(aiCount) || 8 } });
+      const { data, error } = await supabase.functions.invoke("ai-generate", { body: { text: aiText, count: parseInt(aiCount) || 8, apiKey: aiKey, provider: aiProvider } });
       if (error) throw new Error(error.message || "Falha na função");
       if (data?.error) throw new Error(data.error);
       const fcs = data?.flashcards || [];
@@ -1006,6 +1011,27 @@ export default function EstudoFlow({ user }) {
                   <div className="flex flex-wrap gap-2">
                     <button onClick={async()=>{ setSyncStatus("saving"); try { const d=await loadUserData(user.id); if(d&&d.subjects){ setSubjects(d.subjects); setRecords(d.records||[]); setGoals(d.goals||[]); if(d.profile)setProfile(d.profile); if(typeof d.dark==="boolean")setDk(d.dark);} setSyncStatus("saved"); flash("Dados recarregados!"); } catch{ setSyncStatus("error"); flash("Falha ao recarregar"); } }} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30":"bg-indigo-50 text-indigo-600 hover:bg-indigo-100"}`}><RotateCcw size={13}/>Recarregar</button>
                     <button onClick={()=>{ const json=JSON.stringify({subjects,records,goals,profile,dark:dk}); if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(json).then(()=>flash("Backup copiado!")).catch(()=>flash("Não foi possível copiar")); } else flash("Clipboard indisponível"); }} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Download size={13}/>Copiar backup</button>
+                  </div>
+                </div>
+                {/* INTELIGÊNCIA ARTIFICIAL (chave do próprio usuário) */}
+                <div className={`${cd} rounded-xl p-4`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles size={14} className="text-indigo-400"/>
+                    <p className={`text-[11px] font-bold ${tx}`}>Inteligência Artificial</p>
+                    <div className={`ml-auto px-2 py-0.5 rounded-full text-[9px] font-bold ${aiKey.trim()?"bg-emerald-500/15 text-emerald-500":"bg-amber-500/15 text-amber-500"}`}>{aiKey.trim()?"Configurada":"Não configurada"}</div>
+                  </div>
+                  <p className={`text-[10px] ${mu} mb-3`}>Use sua <b>própria</b> chave para gerar flashcards/resumos. Ela fica salva só neste navegador — não enviamos nem guardamos a chave de ninguém.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Provedor</label>
+                      <select value={aiProvider} onChange={(e)=>setAiProvider(e.target.value)} className={ip}><option value="gemini">Google Gemini</option><option value="openai">OpenAI (GPT)</option><option value="anthropic">Anthropic (Claude)</option></select>
+                    </div>
+                    <div className="sm:col-span-2"><label className={`text-[9px] ${mu} mb-0.5 block`}>Sua chave de API</label>
+                      <input type="password" value={aiKey} onChange={(e)=>setAiKey(e.target.value)} className={ip} placeholder="cole sua chave aqui"/>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {aiKey&&<button onClick={()=>{setAiKey("");flash("Chave removida");}} className={`text-[10px] font-bold px-2 py-1 rounded ${dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Remover chave</button>}
+                    <a href={aiProvider==='openai'?"https://platform.openai.com/api-keys":aiProvider==='anthropic'?"https://console.anthropic.com/settings/keys":"https://aistudio.google.com/app/apikey"} target="_blank" rel="noreferrer" className="text-[10px] font-bold px-2 py-1 rounded bg-indigo-500/15 text-indigo-500">Onde pegar a chave →</a>
                   </div>
                 </div>
                 <div className={`${cd} rounded-xl p-4`}>
@@ -1609,6 +1635,7 @@ export default function EstudoFlow({ user }) {
       <Mdl open={mt==="ai"} onClose={cl} title="Gerar com IA" dk={dk}>
         <div className="space-y-2.5">
           <p className={`text-[11px] ${mu}`}>Cole um texto (resumo de aula, artigo, anotações) e a IA cria flashcards + um resumo.</p>
+          {!aiKey.trim()&&<div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-100 text-[11px] text-amber-700">⚠️ Você ainda não configurou sua chave de IA. Vá em <b>Configurações ▸ Inteligência Artificial</b> e cole a sua (cada um usa a própria).</div>}
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Texto base</label><textarea value={aiText} onChange={(e)=>setAiText(e.target.value)} rows={6} className={ip} placeholder="Cole aqui o conteúdo..." autoFocus/></div>
           <div className="grid grid-cols-2 gap-2">
             <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Baralho (cria se não existir)</label><input value={aiDeckName} onChange={(e)=>setAiDeckName(e.target.value)} className={ip}/></div>
