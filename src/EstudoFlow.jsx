@@ -194,6 +194,7 @@ export default function EstudoFlow({ user }) {
   const [quickTask, setQuickTask] = useState("");
   const [taskFilter, setTaskFilter] = useState("all");
   const [dragId, setDragId] = useState(null);
+  const [dragColId, setDragColId] = useState(null);
   const [colId, setColId] = useState("");
   const [colLabel, setColLabel] = useState("");
   const [colColor, setColColor] = useState("#6366f1");
@@ -363,6 +364,14 @@ export default function EstudoFlow({ user }) {
       const i = p.findIndex((c) => c.id === id); const j = i + dir;
       if (i < 0 || j < 0 || j >= p.length) return p;
       const n = [...p]; [n[i], n[j]] = [n[j], n[i]]; return n;
+    });
+  };
+  const reorderCol = (fromId, toId) => {
+    if (fromId === toId) return;
+    setColumns((p) => {
+      const from = p.findIndex((c) => c.id === fromId), to = p.findIndex((c) => c.id === toId);
+      if (from < 0 || to < 0) return p;
+      const n = [...p]; const [m] = n.splice(from, 1); n.splice(to, 0, m); return n;
     });
   };
   const openAddTask = (status) => { setTkId(""); setTkTitle(""); setTkNotes(""); setTkPrio("media"); setTkDue(""); setTkSubj(""); setTkStatus(status || firstCol()); setTkRec("none"); setTkEst(""); setTkUsed(""); setTkChecklist([]); setTkNewItem(""); setMt("task"); };
@@ -965,9 +974,9 @@ export default function EstudoFlow({ user }) {
                   {columns.map((col)=>{
                     const items=tasks.filter((t)=>t.status===col.id); const ci=columns.findIndex((c)=>c.id===col.id);
                     return (
-                      <div key={col.id} onDragOver={(e)=>e.preventDefault()} onDrop={()=>{if(dragId){const tk=tasks.find((x)=>x.id===dragId); if(tk)setTaskStatus(tk,col.id); setDragId(null);}}} className={`group rounded-xl p-3 min-h-[140px] w-[270px] flex-shrink-0 ${dk?"bg-white/[0.03] border border-white/[0.06]":"bg-gray-100/70 border border-gray-200/60"}`}>
+                      <div key={col.id} onDragOver={(e)=>e.preventDefault()} onDrop={()=>{ if(dragColId){reorderCol(dragColId,col.id);setDragColId(null);} else if(dragId){const tk=tasks.find((x)=>x.id===dragId); if(tk)setTaskStatus(tk,col.id); setDragId(null);} }} className={`group rounded-xl p-3 min-h-[140px] w-[270px] flex-shrink-0 transition ${dk?"bg-white/[0.03] border border-white/[0.06]":"bg-gray-100/70 border border-gray-200/60"} ${dragColId===col.id?"opacity-40":""} ${dragColId&&dragColId!==col.id?"ring-2 ring-indigo-400/50":""}`}>
                         <div className="flex items-center justify-between mb-3 px-1">
-                          <div className="flex items-center gap-2 min-w-0"><span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:col.color}}/><p className={`text-[12px] font-bold ${tx} truncate`}>{col.label}</p><span className={`text-[10px] ${mu} flex-shrink-0`}>{items.length}</span></div>
+                          <div draggable onDragStart={(e)=>{e.stopPropagation();setDragColId(col.id);}} onDragEnd={()=>setDragColId(null)} title="Arraste para reordenar" className="flex items-center gap-1.5 min-w-0 cursor-grab active:cursor-grabbing select-none"><GripVertical size={13} className={`${mu} flex-shrink-0`}/><span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:col.color}}/><p className={`text-[12px] font-bold ${tx} truncate`}>{col.label}</p><span className={`text-[10px] ${mu} flex-shrink-0`}>{items.length}</span></div>
                           <div className="flex items-center gap-0.5 flex-shrink-0">
                             <button disabled={ci===0} onClick={()=>moveCol(col.id,-1)} title="Mover para a esquerda" className={`p-1 rounded opacity-0 group-hover:opacity-100 transition disabled:opacity-0 ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><ChevronLeft size={13}/></button>
                             <button disabled={ci===columns.length-1} onClick={()=>moveCol(col.id,1)} title="Mover para a direita" className={`p-1 rounded opacity-0 group-hover:opacity-100 transition disabled:opacity-0 ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><ChevronRight size={13}/></button>
