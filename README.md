@@ -49,6 +49,12 @@ pessoa tem sua própria conta e seus dados são totalmente isolados.
 - **Ícone** e **cor** personalizados por conteúdo
 - Total de horas acumuladas em cada um
 
+### ✅ Tarefas & Kanban (integrados)
+- **Lista de tarefas** com adição rápida (Enter), prioridade, prazo, vínculo a um conteúdo e filtros por status
+- **Quadro Kanban** estilo Trello: colunas **A Fazer / Fazendo / Concluído**
+- **Arrastar e soltar** os cards entre colunas (desktop) + setas ◂ ▸ (celular)
+- Lista e quadro **compartilham os mesmos dados** — criou na lista, aparece no quadro
+
 ### 🕓 Histórico
 - Lista filtrável por **categoria** e **conteúdo**
 - **Seleção múltipla** para exclusão em lote

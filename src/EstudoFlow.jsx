@@ -10,7 +10,8 @@ import {
   Dumbbell, BookMarked, Beaker, Globe, Calculator, Atom, Pen, Music,
   Code, Palette, Heart, Mountain, Bike, Target, BarChart3, RotateCcw,
   Download, Upload, Printer, Award, Wifi, WifiOff, Database, LogOut, KeyRound,
-  Info, Sparkles, GraduationCap, Users, Rocket, Cloud
+  Info, Sparkles, GraduationCap, Users, Rocket, Cloud,
+  ListTodo, Columns3, GripVertical, Circle, CheckCircle2, Flag, ArrowRight, CalendarDays
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { loadUserData, saveUserData } from "./data";
@@ -30,6 +31,8 @@ const CATS = [
   { id: "exercicios", label: "Exercícios Físicos", icon: Dumbbell, color: "#10b981" },
   { id: "leituras", label: "Leituras", icon: BookMarked, color: "#f59e0b" },
 ];
+const PRIOS = { alta: { l: "Alta", c: "#ef4444" }, media: { l: "Média", c: "#f59e0b" }, baixa: { l: "Baixa", c: "#10b981" } };
+const KCOLS = [{ k: "todo", l: "A Fazer", c: "#6366f1" }, { k: "doing", l: "Fazendo", c: "#f59e0b" }, { k: "done", l: "Concluído", c: "#10b981" }];
 const ICO = [
   { n: "Beaker", c: Beaker },{ n: "Globe", c: Globe },{ n: "Calculator", c: Calculator },
   { n: "Atom", c: Atom },{ n: "Pen", c: Pen },{ n: "BookMarked", c: BookMarked },
@@ -103,6 +106,7 @@ export default function EstudoFlow({ user }) {
   const [subjects, setSubjects] = useState([]);
   const [records, setRecords] = useState([]);
   const [goals, setGoals] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [profile, setProfile] = useState(defaultProfile);
   const [notif, setNotif] = useState(null);
 
@@ -123,6 +127,7 @@ export default function EstudoFlow({ user }) {
         setSubjects(d.subjects);
         setRecords(d.records || []);
         setGoals(d.goals || []);
+        setTasks(d.tasks || []);
         setProfile(d.profile || defaultProfile);
         if (typeof d.dark === "boolean") setDk(d.dark);
       } else {
@@ -131,7 +136,7 @@ export default function EstudoFlow({ user }) {
         setSubjects(seed);
         setPg("Sobre");
         // cria a linha do usuário já no 1º acesso → nas próximas vezes cai no Dashboard
-        saveUserData(user.id, { subjects: seed, records: [], goals: [], profile: defaultProfile, dark: dk }).catch(() => {});
+        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], profile: defaultProfile, dark: dk }).catch(() => {});
       }
       setLoaded(true);
     }).catch(() => {
@@ -153,11 +158,11 @@ export default function EstudoFlow({ user }) {
     clearTimeout(saveRef.current);
     setSyncStatus("saving");
     saveRef.current = setTimeout(() => {
-      saveUserData(user.id, { subjects, records, goals, profile, dark: dk })
+      saveUserData(user.id, { subjects, records, goals, tasks, profile, dark: dk })
         .then(() => setSyncStatus("saved"))
         .catch(() => setSyncStatus("error"));
     }, 1200);
-  }, [subjects, records, goals, profile, dk, loaded, user.id]);
+  }, [subjects, records, goals, tasks, profile, dk, loaded, user.id]);
 
   const [tText, setTText] = useState("");
   const [tCat, setTCat] = useState("estudos");
@@ -175,6 +180,17 @@ export default function EstudoFlow({ user }) {
   const [hSelMode, setHSelMode] = useState(false);
   const [rP, setRP] = useState("month");
   const [mt, setMt] = useState(null);
+  // Tarefas / Kanban
+  const [tkId, setTkId] = useState("");
+  const [tkTitle, setTkTitle] = useState("");
+  const [tkNotes, setTkNotes] = useState("");
+  const [tkPrio, setTkPrio] = useState("media");
+  const [tkDue, setTkDue] = useState("");
+  const [tkSubj, setTkSubj] = useState("");
+  const [tkStatus, setTkStatus] = useState("todo");
+  const [quickTask, setQuickTask] = useState("");
+  const [taskFilter, setTaskFilter] = useState("all");
+  const [dragId, setDragId] = useState(null);
   const [mDate, smDate] = useState("");
   const [mSub, smSub] = useState("");
   const [mDur, smDur] = useState("60");
@@ -280,9 +296,35 @@ export default function EstudoFlow({ user }) {
   const delSub = (id) => { setSubjects((p) => p.filter((s) => s.id !== id)); setRecords((p) => p.filter((r) => r.subjectId !== id)); flash("Conteúdo removido"); };
   const delGoal = (id) => { setGoals((p) => p.filter((g) => g.id !== id)); flash("Meta removida"); };
 
+  // ── Tarefas / Kanban ──
+  const addTask = (title, status = "todo") => {
+    if (!title.trim()) return;
+    setTasks((p) => [...p, { id: uid(), title: title.trim(), notes: "", status, priority: "media", due: "", subjectId: "", createdAt: Date.now() }]);
+    flash("Tarefa criada!");
+  };
+  const updTask = (id, patch) => setTasks((p) => p.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  const delTask = (id) => { setTasks((p) => p.filter((t) => t.id !== id)); flash("Tarefa removida"); };
+  const moveTask = (id, dir) => {
+    const order = ["todo", "doing", "done"];
+    setTasks((p) => p.map((t) => {
+      if (t.id !== id) return t;
+      const i = Math.min(order.length - 1, Math.max(0, order.indexOf(t.status) + dir));
+      return { ...t, status: order[i] };
+    }));
+  };
+  const openAddTask = (status = "todo") => { setTkId(""); setTkTitle(""); setTkNotes(""); setTkPrio("media"); setTkDue(""); setTkSubj(""); setTkStatus(status); setMt("task"); };
+  const openEditTask = (t) => { setTkId(t.id); setTkTitle(t.title); setTkNotes(t.notes || ""); setTkPrio(t.priority || "media"); setTkDue(t.due || ""); setTkSubj(t.subjectId || ""); setTkStatus(t.status || "todo"); setMt("task"); };
+  const saveTask = () => {
+    if (!tkTitle.trim()) return;
+    const d = { title: tkTitle.trim(), notes: tkNotes, priority: tkPrio, due: tkDue, subjectId: tkSubj, status: tkStatus };
+    if (tkId) { updTask(tkId, d); flash("Tarefa atualizada!"); }
+    else { setTasks((p) => [...p, { id: uid(), createdAt: Date.now(), ...d }]); flash("Tarefa criada!"); }
+    cl();
+  };
+
   const resetAll = async () => {
     if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
-    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]);
+    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]);
     setSec(0); setTOn(false); setTP(false); setTText(""); setTAccum(0); setTStartedAt(null);
     setConfirmReset(false); flash("Tudo resetado!");
   };
@@ -350,7 +392,7 @@ export default function EstudoFlow({ user }) {
 
   const cDIM = new Date(calY, calM+1, 0).getDate(), cFD = new Date(calY, calM, 1).getDay();
   const nav = (p) => { setPg(p); setSb(false); };
-  const menus = [{n:"Dashboard",i:LayoutDashboard},{n:"Conteúdos",i:BookOpen},{n:"Histórico",i:Clock},{n:"Relatórios",i:BarChart3},{n:"Configurações",i:Settings},{n:"Sobre",i:Info}];
+  const menus = [{n:"Dashboard",i:LayoutDashboard},{n:"Conteúdos",i:BookOpen},{n:"Tarefas",i:ListTodo},{n:"Quadro",i:Columns3},{n:"Histórico",i:Clock},{n:"Relatórios",i:BarChart3},{n:"Configurações",i:Settings},{n:"Sobre",i:Info}];
 
   const BtnAct = ({ children, color, onClick, disabled }) => (
     <button onClick={onClick} disabled={disabled} className={`inline-flex items-center gap-1 px-3.5 py-2 rounded-lg ${color} text-white text-xs font-bold shadow-md transition hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed`}>{children}</button>
@@ -777,6 +819,101 @@ export default function EstudoFlow({ user }) {
               </div>
             )}
 
+            {/* TAREFAS (LISTA) */}
+            {pg==="Tarefas"&&(
+              <div className="space-y-3 max-w-3xl">
+                <div className={`${cd} rounded-xl p-3 flex flex-col sm:flex-row gap-2`}>
+                  <input value={quickTask} onChange={(e)=>setQuickTask(e.target.value)} onKeyDown={(e)=>{if(e.key==='Enter'){addTask(quickTask);setQuickTask("");}}} placeholder="Adicionar tarefa e apertar Enter..." className={`${ip} flex-1`}/>
+                  <button onClick={()=>{addTask(quickTask);setQuickTask("");}} className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow flex-shrink-0"><Plus size={14}/>Adicionar</button>
+                  <button onClick={()=>openAddTask()} className={`flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold flex-shrink-0 ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Edit3 size={13}/>Detalhada</button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  {[{k:"all",l:"Todas"},{k:"todo",l:"A Fazer"},{k:"doing",l:"Fazendo"},{k:"done",l:"Concluídas"}].map((f)=>(
+                    <button key={f.k} onClick={()=>setTaskFilter(f.k)} className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${taskFilter===f.k?"bg-indigo-500 text-white shadow":mu}`}>{f.l}</button>
+                  ))}
+                  <span className={`text-[10px] ${mu} ml-auto`}>{tasks.length} tarefas · {tasks.filter((t)=>t.status==='done').length} concluídas</span>
+                </div>
+                <div className="space-y-2">
+                  {tasks.filter((t)=>taskFilter==='all'||t.status===taskFilter).sort((a,b)=>{const pr={alta:0,media:1,baixa:2}; return ((a.status==='done')-(b.status==='done'))||((pr[a.priority]??1)-(pr[b.priority]??1));}).map((t)=>{
+                    const s=t.subjectId?gS(t.subjectId):null; const done=t.status==='done'; const overdue=t.due&&t.due<toK(TODAY)&&!done; const st=KCOLS.find((c)=>c.k===t.status)||KCOLS[0];
+                    return (
+                      <div key={t.id} className={`${cd} rounded-xl p-3 flex items-center gap-3 group`}>
+                        <button onClick={()=>updTask(t.id,{status:done?'todo':'done'})} className="flex-shrink-0">{done?<CheckCircle2 size={20} className="text-emerald-500"/>:<Circle size={20} className={mu}/>}</button>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-[13px] font-semibold truncate ${done?"line-through "+mu:tx}`}>{t.title}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{background:(PRIOS[t.priority]||PRIOS.media).c+"22",color:(PRIOS[t.priority]||PRIOS.media).c}}>{(PRIOS[t.priority]||PRIOS.media).l}</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{background:st.c+"22",color:st.c}}>{st.l}</span>
+                            {t.due&&<span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${overdue?"bg-red-500/15 text-red-500":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><CalendarDays size={9}/>{t.due.split("-").reverse().join("/")}</span>}
+                            {s&&<span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-1" style={{background:s.color+"18",color:s.color}}><span className="w-1.5 h-1.5 rounded-full" style={{background:s.color}}/>{s.name}</span>}
+                          </div>
+                        </div>
+                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
+                          <button onClick={()=>openEditTask(t)} className={`p-1.5 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
+                          <button onClick={()=>delTask(t.id)} className="p-1.5 rounded-md hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {tasks.filter((t)=>taskFilter==='all'||t.status===taskFilter).length===0&&(
+                    <div className={`${cd} rounded-xl p-10 text-center`}>
+                      <ListTodo size={32} className={`mx-auto mb-2 ${mu}`}/>
+                      <p className={`text-sm font-bold ${tx}`}>Nenhuma tarefa por aqui</p>
+                      <p className={`text-xs ${mu}`}>Adicione sua primeira tarefa acima 👆</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* QUADRO (KANBAN) */}
+            {pg==="Quadro"&&(
+              <div className="space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className={`text-xs ${mu}`}>Arraste os cards entre as colunas (ou use as setas ◂ ▸ no celular).</p>
+                  <button onClick={()=>openAddTask("todo")} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Nova tarefa</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {KCOLS.map((col)=>{
+                    const items=tasks.filter((t)=>t.status===col.k); const ci=KCOLS.findIndex((c)=>c.k===col.k);
+                    return (
+                      <div key={col.k} onDragOver={(e)=>e.preventDefault()} onDrop={()=>{if(dragId){updTask(dragId,{status:col.k});setDragId(null);}}} className={`rounded-xl p-3 min-h-[140px] ${dk?"bg-white/[0.03] border border-white/[0.06]":"bg-gray-100/70 border border-gray-200/60"}`}>
+                        <div className="flex items-center justify-between mb-3 px-1">
+                          <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{background:col.c}}/><p className={`text-[12px] font-bold ${tx}`}>{col.l}</p><span className={`text-[10px] ${mu}`}>{items.length}</span></div>
+                          <button onClick={()=>openAddTask(col.k)} className={`p-1 rounded ${dk?"hover:bg-white/10 text-gray-400":"hover:bg-white text-gray-500"}`}><Plus size={14}/></button>
+                        </div>
+                        <div className="space-y-2">
+                          {items.map((t)=>{
+                            const s=t.subjectId?gS(t.subjectId):null; const overdue=t.due&&t.due<toK(TODAY)&&col.k!=='done';
+                            return (
+                              <div key={t.id} draggable onDragStart={()=>setDragId(t.id)} onDragEnd={()=>setDragId(null)} className={`rounded-lg p-3 cursor-grab active:cursor-grabbing group ${dk?"bg-gray-900 border border-white/10":"bg-white border border-gray-200 shadow-sm"} ${dragId===t.id?"opacity-40":""}`} style={{borderLeft:`3px solid ${(PRIOS[t.priority]||PRIOS.media).c}`}}>
+                                <div className="flex items-start gap-1.5">
+                                  <GripVertical size={13} className={`${mu} mt-0.5 flex-shrink-0 hidden md:block`}/>
+                                  <p className={`text-[12px] font-semibold leading-snug flex-1 ${col.k==='done'?"line-through "+mu:tx}`}>{t.title}</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1 mt-2">
+                                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{background:(PRIOS[t.priority]||PRIOS.media).c+"22",color:(PRIOS[t.priority]||PRIOS.media).c}}>{(PRIOS[t.priority]||PRIOS.media).l}</span>
+                                  {t.due&&<span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${overdue?"bg-red-500/15 text-red-500":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><CalendarDays size={8}/>{t.due.split("-").reverse().join("/")}</span>}
+                                  {s&&<span className="text-[8px] font-semibold px-1.5 py-0.5 rounded-full" style={{background:s.color+"18",color:s.color}}>{s.name.length>12?s.name.slice(0,12)+"…":s.name}</span>}
+                                </div>
+                                <div className="flex items-center gap-0.5 mt-2 pt-2 border-t border-dashed opacity-60 group-hover:opacity-100 transition" style={{borderColor:dk?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.08)"}}>
+                                  <button disabled={ci===0} onClick={()=>moveTask(t.id,-1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronLeft size={13} className={mu}/></button>
+                                  <button disabled={ci===2} onClick={()=>moveTask(t.id,1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronRight size={13} className={mu}/></button>
+                                  <button onClick={()=>openEditTask(t)} className={`p-1 rounded ml-auto ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
+                                  <button onClick={()=>delTask(t.id)} className="p-1 rounded hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {items.length===0&&<div className={`text-center py-6 text-[11px] rounded-lg border-2 border-dashed ${mu} ${dk?"border-white/10":"border-gray-200"}`}>Solte aqui</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* SOBRE */}
             {pg==="Sobre"&&(
               <div className="space-y-4 max-w-4xl">
@@ -912,6 +1049,20 @@ export default function EstudoFlow({ user }) {
 
       <Mdl open={mt==="avatar"} onClose={cl} title="Avatar" dk={dk}>
         <div className="grid grid-cols-6 gap-2">{EMO.map((em)=><button key={em} onClick={()=>{setProfile((p)=>({...p,emoji:em}));flash("Avatar!");cl();}} className={`w-10 h-10 rounded-lg text-lg flex items-center justify-center transition hover:scale-110 ${profile.emoji===em?"ring-2 ring-indigo-500 bg-indigo-500/20":""} ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}>{em}</button>)}</div>
+      </Mdl>
+
+      <Mdl open={mt==="task"} onClose={cl} title={tkId?"Editar Tarefa":"Nova Tarefa"} dk={dk}>
+        <div className="space-y-2.5">
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Título</label><input value={tkTitle} onChange={(e)=>setTkTitle(e.target.value)} className={ip} placeholder="Ex: Revisar capítulo 3" autoFocus/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Status</label><select value={tkStatus} onChange={(e)=>setTkStatus(e.target.value)} className={ip}>{KCOLS.map((c)=><option key={c.k} value={c.k}>{c.l}</option>)}</select></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Prioridade</label><select value={tkPrio} onChange={(e)=>setTkPrio(e.target.value)} className={ip}><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></div>
+            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Prazo</label><input type="date" value={tkDue} onChange={(e)=>setTkDue(e.target.value)} className={ip}/></div>
+          </div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Conteúdo (opcional)</label><select value={tkSubj} onChange={(e)=>setTkSubj(e.target.value)} className={ip}><option value="">— Nenhum —</option>{subjects.map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Notas</label><input value={tkNotes} onChange={(e)=>setTkNotes(e.target.value)} className={ip} placeholder="Opcional..."/></div>
+          <button onClick={saveTask} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{tkId?"Salvar":"Criar"}</button>
+        </div>
       </Mdl>
 
       {/* PRINT */}
