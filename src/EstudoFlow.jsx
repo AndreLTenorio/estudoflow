@@ -13,7 +13,7 @@ import {
   Info, Sparkles, GraduationCap, Users, Rocket, Cloud,
   ListTodo, Columns3, GripVertical, Circle, CheckCircle2, Flag, ArrowRight, CalendarDays,
   Repeat, Hourglass, Archive, ArchiveRestore,
-  Timer, CalendarRange, Trophy, Zap, Coffee, Star, Lock,
+  Timer, CalendarRange, Trophy, Zap, Coffee, Star, Lock, Eye, Image as ImageIcon,
   Layers, Brain, RotateCw, ArrowLeft
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
@@ -29,10 +29,10 @@ const toK = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate(
 const pK = (k) => { const p = k.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); };
 const MO = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
-const CATS = [
-  { id: "estudos", label: "Estudos", icon: BookOpen, color: "#6366f1" },
-  { id: "exercicios", label: "Exercícios Físicos", icon: Dumbbell, color: "#10b981" },
-  { id: "leituras", label: "Leituras", icon: BookMarked, color: "#f59e0b" },
+const DEFAULT_CATS = [
+  { id: "estudos", label: "Estudos", icon: "BookOpen", color: "#6366f1" },
+  { id: "exercicios", label: "Exercícios Físicos", icon: "Dumbbell", color: "#10b981" },
+  { id: "leituras", label: "Leituras", icon: "BookMarked", color: "#f59e0b" },
 ];
 // Sequência de dias (streak) a partir de uma lista de datas YYYY-MM-DD.
 // Reset automático ao virar o dia: é tudo baseado em data, então 00:00 inicia novo dia.
@@ -131,6 +131,10 @@ export default function EstudoFlow({ user }) {
   const [decks, setDecks] = useState([]);
   const [cards, setCards] = useState([]);
   const [fcDays, setFcDays] = useState([]); // dias (YYYY-MM-DD) em que estudou flashcards
+  const [fcStats, setFcStats] = useState(null); // { date, reviews } — revisões do dia atual
+  const [cats, setCats] = useState(DEFAULT_CATS); // categorias de conteúdo (editáveis)
+  const [catId, setCatId] = useState(""); const [catLabel, setCatLabel] = useState(""); const [catColor, setCatColor] = useState("#6366f1"); const [catIcon, setCatIcon] = useState("BookOpen");
+  const [siId, setSiId] = useState(""); const [siDay, setSiDay] = useState("Seg"); const [siSub, setSiSub] = useState(""); const [siStart, setSiStart] = useState("08:00"); const [siDur, setSiDur] = useState("60");
   const [profile, setProfile] = useState(defaultProfile);
   const [notif, setNotif] = useState(null);
 
@@ -157,6 +161,8 @@ export default function EstudoFlow({ user }) {
         setDecks(d.decks || []);
         setCards(d.cards || []);
         setFcDays(d.fcDays || []);
+        setFcStats(d.fcStats || null);
+        setCats(d.cats && d.cats.length ? d.cats : DEFAULT_CATS);
         if (d.pomo) { setPomo(d.pomo); setPmSec((d.pomo.focus || 25) * 60); }
         setProfile(d.profile || defaultProfile);
         if (typeof d.dark === "boolean") setDk(d.dark);
@@ -166,7 +172,7 @@ export default function EstudoFlow({ user }) {
         setSubjects(seed);
         setPg("Sobre");
         // cria a linha do usuário já no 1º acesso → nas próximas vezes cai no Dashboard
-        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], columns: DEFAULT_COLS, schedule: null, decks: [], cards: [], fcDays: [], pomo, profile: defaultProfile, dark: dk }).catch(() => {});
+        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], columns: DEFAULT_COLS, schedule: null, decks: [], cards: [], fcDays: [], fcStats: null, cats: DEFAULT_CATS, pomo, profile: defaultProfile, dark: dk }).catch(() => {});
       }
       setLoaded(true);
     }).catch(() => {
@@ -188,11 +194,11 @@ export default function EstudoFlow({ user }) {
     clearTimeout(saveRef.current);
     setSyncStatus("saving");
     saveRef.current = setTimeout(() => {
-      saveUserData(user.id, { subjects, records, goals, tasks, columns, schedule, decks, cards, fcDays, pomo, profile, dark: dk })
+      saveUserData(user.id, { subjects, records, goals, tasks, columns, schedule, decks, cards, fcDays, fcStats, cats, pomo, profile, dark: dk })
         .then(() => setSyncStatus("saved"))
         .catch(() => setSyncStatus("error"));
     }, 1200);
-  }, [subjects, records, goals, tasks, columns, schedule, decks, cards, fcDays, pomo, profile, dk, loaded, user.id]);
+  }, [subjects, records, goals, tasks, columns, schedule, decks, cards, fcDays, fcStats, cats, pomo, profile, dk, loaded, user.id]);
 
   /* ── Marca o tema no <html> (para barras de rolagem tema-aware) ── */
   useEffect(() => {
@@ -254,13 +260,10 @@ export default function EstudoFlow({ user }) {
   const [fcShow, setFcShow] = useState(false);
   const [dkId, setDkId] = useState(""); const [dkName, setDkName] = useState(""); const [dkColor, setDkColor] = useState("#6366f1");
   const [cdId, setCdId] = useState(""); const [cdFront, setCdFront] = useState(""); const [cdBack, setCdBack] = useState(""); const [cdDeck, setCdDeck] = useState("");
-  // Gerador por IA
-  const [aiText, setAiText] = useState(""); const [aiDeckName, setAiDeckName] = useState(""); const [aiCount, setAiCount] = useState(8);
-  const [aiBusy, setAiBusy] = useState(false); const [aiError, setAiError] = useState(""); const [aiResult, setAiResult] = useState(null);
-  // Chave de IA do próprio usuário (BYOK) — guardada só no navegador
-  const [aiKey, setAiKey] = useState(() => { try { return localStorage.getItem("ef_ai_key") || ""; } catch { return ""; } });
-  const [aiProvider, setAiProvider] = useState(() => { try { return localStorage.getItem("ef_ai_provider") || "gemini"; } catch { return "gemini"; } });
-  useEffect(() => { try { localStorage.setItem("ef_ai_key", aiKey); localStorage.setItem("ef_ai_provider", aiProvider); } catch { /* */ } }, [aiKey, aiProvider]);
+  // Estudo de flashcards (quantidade/escopo)
+  const [studyDeck, setStudyDeck] = useState(null);
+  const [studyScope, setStudyScope] = useState("all"); // all | due
+  const [studyQty, setStudyQty] = useState("");
   const [mDate, smDate] = useState("");
   const [mSub, smSub] = useState("");
   const [mDur, smDur] = useState("60");
@@ -494,15 +497,27 @@ export default function EstudoFlow({ user }) {
 
   // ── Cronograma ──
   const DOW = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-  const gerarCronograma = () => {
-    const subs = schSubs.length ? schSubs : subjects.map((s) => s.id);
-    if (!subs.length) { flash("Cadastre conteúdos primeiro"); return; }
-    if (!schDays.length) { flash("Escolha ao menos 1 dia"); return; }
-    const pool = [...subs].sort(() => Math.random() - 0.5);
-    let k = 0; const grid = {};
-    DOW.filter((d) => schDays.includes(d)).forEach((d) => { grid[d] = []; for (let b = 0; b < schBlocks; b++) { grid[d].push(pool[k % pool.length]); k++; } });
-    setSchedule({ grid, days: DOW.filter((d) => schDays.includes(d)), blocks: schBlocks, generatedAt: Date.now() });
-    flash("Cronograma gerado!");
+  // Cronograma editável: schedule = { [dia]: [{id, subjectId, start, dur}] }
+  const sched = schedule && typeof schedule === "object" && !schedule.grid ? schedule : {};
+  const openAddSched = (day) => { setSiId(""); setSiDay(day); setSiSub(subjects[0]?.id || ""); setSiStart("08:00"); setSiDur("60"); setMt("sched"); };
+  const openEditSched = (day, it) => { setSiId(it.id); setSiDay(day); setSiSub(it.subjectId); setSiStart(it.start || "08:00"); setSiDur(String(it.dur || 60)); setMt("sched"); };
+  const saveSched = () => {
+    if (!siSub) { flash("Escolha um conteúdo"); return; }
+    setSchedule((prev) => {
+      const base = prev && !prev.grid ? { ...prev } : {};
+      const list = [...(base[siDay] || [])];
+      const item = { id: siId || uid(), subjectId: siSub, start: siStart, dur: parseInt(siDur) || 0 };
+      const idx = list.findIndex((x) => x.id === siId);
+      if (idx >= 0) list[idx] = item; else list.push(item);
+      list.sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+      base[siDay] = list;
+      return base;
+    });
+    flash(siId ? "Item atualizado!" : "Item adicionado!"); cl();
+  };
+  const delSched = (day, id) => {
+    setSchedule((prev) => { const base = prev && !prev.grid ? { ...prev } : {}; base[day] = (base[day] || []).filter((x) => x.id !== id); return base; });
+    flash("Item removido");
   };
 
   // ── Flashcards (repetição espaçada estilo SM-2) ──
@@ -527,30 +542,19 @@ export default function EstudoFlow({ user }) {
   const delCard = (id) => { setCards((p) => p.filter((c) => c.id !== id)); flash("Carta removida"); };
   const openAddCard = (deckId) => { setCdId(""); setCdFront(""); setCdBack(""); setCdDeck(deckId); setMt("card"); };
   const openEditCard = (c) => { setCdId(c.id); setCdFront(c.front); setCdBack(c.back); setCdDeck(c.deckId); setMt("card"); };
-  const startStudy = (deckId) => {
-    const q = cards.filter((c) => c.deckId === deckId && fcDue(c)).map((c) => c.id);
-    if (!q.length) { flash("Nenhuma carta para revisar hoje 🎉"); return; }
-    setFcDeck(deckId); setFcQueue(q); setFcShow(false); setFcView("study");
+  const openStudy = (deckId) => {
+    const all = cards.filter((c) => c.deckId === deckId);
+    if (!all.length) { flash("Baralho sem cartas"); return; }
+    setStudyDeck(deckId); setStudyScope("all"); setStudyQty(""); setMt("study");
   };
-  const openAI = () => { setAiText(""); setAiDeckName("IA — " + new Date().toLocaleDateString("pt-BR")); setAiCount(8); setAiError(""); setAiResult(null); setMt("ai"); };
-  const gerarIA = async () => {
-    if (!aiKey.trim()) { setAiError("Adicione sua chave de IA em Configurações ▸ Inteligência Artificial."); return; }
-    if (aiText.trim().length < 20) { setAiError("Cole um texto maior (mín. ~20 caracteres)."); return; }
-    setAiBusy(true); setAiError(""); setAiResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-generate", { body: { text: aiText, count: parseInt(aiCount) || 8, apiKey: aiKey, provider: aiProvider } });
-      if (error) throw new Error(error.message || "Falha na função");
-      if (data?.error) throw new Error(data.error);
-      const fcs = data?.flashcards || [];
-      if (!fcs.length) throw new Error("A IA não retornou cartões. Tente outro texto.");
-      const name = aiDeckName.trim() || "IA";
-      let deckId; const existing = decks.find((d) => d.name.toLowerCase() === name.toLowerCase());
-      if (existing) deckId = existing.id; else { deckId = uid(); setDecks((p) => [...p, { id: deckId, name, color: COLS[decks.length % COLS.length] }]); }
-      setCards((p) => [...p, ...fcs.map((f) => ({ id: uid(), deckId, front: f.front, back: f.back, ease: 2.5, interval: 0, reps: 0, due: "", lapses: 0 }))]);
-      setAiResult({ summary: data.summary || "", count: fcs.length, deck: name });
-      flash(`${fcs.length} flashcards gerados!`);
-    } catch (e) { setAiError(String(e?.message || e)); }
-    setAiBusy(false);
+  const beginStudy = () => {
+    const all = cards.filter((c) => c.deckId === studyDeck);
+    const pool = studyScope === "due" ? all.filter(fcDue) : all;
+    if (!pool.length) { flash(studyScope === "due" ? "Nenhuma carta pendente 🎉" : "Baralho sem cartas"); return; }
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    let n = parseInt(studyQty) || pool.length;
+    n = Math.max(1, Math.min(pool.length, n));
+    setFcDeck(studyDeck); setFcQueue(shuffled.slice(0, n).map((c) => c.id)); setFcShow(false); setFcView("study"); cl();
   };
   const rateCard = (q) => {
     const id = fcQueue[0]; const card = cards.find((c) => c.id === id); if (!card) return;
@@ -564,15 +568,23 @@ export default function EstudoFlow({ user }) {
       ease = Math.max(1.3, ease + (q === 3 ? 0.15 : q === 1 ? -0.15 : 0));
     }
     const nd = new Date(TODAY); nd.setDate(nd.getDate() + interval);
-    updateCard(id, { ease, interval, reps, due: toK(nd), lapses: (card.lapses || 0) + (q === 0 ? 1 : 0) });
-    setFcDays((p) => (p.includes(toK(TODAY)) ? p : [...p, toK(TODAY)])); // marca o dia de estudo
+    updateCard(id, { ease, interval, reps, due: toK(nd), lapses: (card.lapses || 0) + (q === 0 ? 1 : 0), views: (card.views || 0) + 1 });
+    // Sequência: se há mais de 10 cartas no total, exige 10 revisões no dia; senão, 1
+    const today = toK(TODAY);
+    setFcStats((prev) => {
+      const cur = prev && prev.date === today ? prev.reviews : 0;
+      const nv = cur + 1;
+      const threshold = cards.length > 10 ? 10 : 1;
+      if (nv >= threshold) setFcDays((p) => (p.includes(today) ? p : [...p, today]));
+      return { date: today, reviews: nv };
+    });
     setFcShow(false);
     setFcQueue((prev) => { const rest = prev.slice(1); return q === 0 ? [...rest, id] : rest; });
   };
 
   const resetAll = async () => {
     if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
-    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]); setColumns(DEFAULT_COLS); setSchedule(null); setDecks([]); setCards([]); setFcDays([]); setFcView("decks");
+    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]); setColumns(DEFAULT_COLS); setSchedule(null); setDecks([]); setCards([]); setFcDays([]); setFcStats(null); setCats(DEFAULT_CATS); setFcView("decks");
     setSec(0); setTOn(false); setTP(false); setTText(""); setTAccum(0); setTStartedAt(null);
     setPmOn(false); setPmMode("focus"); setPmSec(pomo.focus * 60); setPmCount(0);
     setConfirmReset(false); flash("Tudo resetado!");
@@ -609,6 +621,40 @@ export default function EstudoFlow({ user }) {
   const openAddGoal = () => { smTitle(""); smSD(toK(TODAY)); smED(""); smHE(true); smTH(50); smCat("estudos"); setMt("addGoal"); };
   const openEditGoal = (g) => { smId(g.id); smTitle(g.title); smSD(g.startDate); smED(g.endDate||""); smHE(!!g.endDate); smTH(g.targetHours); smCat(g.category); setMt("editGoal"); };
   const openProfile = () => { smPN(profile.name); setMt("profile"); };
+  const onPickAvatar = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { flash("Selecione uma imagem"); return; }
+    const r = new FileReader();
+    r.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const sz = 160, cv = document.createElement("canvas"); cv.width = sz; cv.height = sz;
+        const ctx = cv.getContext("2d"); const m = Math.min(img.width, img.height);
+        ctx.drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, sz, sz);
+        setProfile((p) => ({ ...p, avatar: cv.toDataURL("image/jpeg", 0.82) }));
+        flash("Foto atualizada!"); cl();
+      };
+      img.src = r.result;
+    };
+    r.readAsDataURL(file);
+  };
+  // ── Categorias de conteúdo ──
+  const openAddCat = () => { setCatId(""); setCatLabel(""); setCatColor(COLS[cats.length % COLS.length]); setCatIcon("BookOpen"); setMt("cat"); };
+  const openEditCat = (c) => { setCatId(c.id); setCatLabel(c.label); setCatColor(c.color); setCatIcon(c.icon || "BookOpen"); setMt("cat"); };
+  const saveCategory = () => {
+    if (!catLabel.trim()) return;
+    if (catId) { setCats((p) => p.map((c) => (c.id === catId ? { ...c, label: catLabel.trim(), color: catColor, icon: catIcon } : c))); flash("Categoria atualizada!"); }
+    else { setCats((p) => [...p, { id: uid(), label: catLabel.trim(), color: catColor, icon: catIcon }]); flash("Categoria criada!"); }
+    cl();
+  };
+  const delCategory = (id) => {
+    if (cats.length <= 1) { flash("Precisa de ao menos 1 categoria"); return; }
+    const fb = cats.find((c) => c.id !== id).id;
+    setSubjects((p) => p.map((s) => (s.category === id ? { ...s, category: fb } : s)));
+    setGoals((p) => p.map((g) => (g.category === id ? { ...g, category: fb } : g)));
+    setCats((p) => p.filter((c) => c.id !== id));
+    flash("Categoria removida");
+  };
   const cl = () => setMt(null);
 
   const hData = useMemo(() => [...records].sort((a,b)=>b.date.localeCompare(a.date)||b.duration-a.duration).filter((r) => {
@@ -635,7 +681,7 @@ export default function EstudoFlow({ user }) {
     const y=TODAY.getFullYear(),mpM={}; rRecs.forEach((r)=>{const mk=r.date.slice(0,7); mpM[mk]=(mpM[mk]||0)+r.duration;}); return MO.map((name,i)=>({date:name.slice(0,3),horas:+((mpM[`${y}-${pad(i+1)}`]||0)/60).toFixed(1)}));
   }, [rRecs, rP, gS]);
   const rTrendLabel = {day:"Detalhamento do Dia",week:"Tendência Semanal (Seg–Dom)",month:`Tendência ${MO[TODAY.getMonth()]}`,year:`Tendência ${TODAY.getFullYear()}`}[rP];
-  const rByCat = useMemo(()=>CATS.map((cat)=>{const ids=subjects.filter((s)=>s.category===cat.id).map((s)=>s.id); const mins=rRecs.filter((r)=>ids.includes(r.subjectId)).reduce((a,r)=>a+r.duration,0); return {name:cat.label,horas:+(mins/60).toFixed(1),color:cat.color};}).filter((c)=>c.horas>0),[rRecs,subjects]);
+  const rByCat = useMemo(()=>cats.map((cat)=>{const ids=subjects.filter((s)=>s.category===cat.id).map((s)=>s.id); const mins=rRecs.filter((r)=>ids.includes(r.subjectId)).reduce((a,r)=>a+r.duration,0); return {name:cat.label,horas:+(mins/60).toFixed(1),color:cat.color};}).filter((c)=>c.horas>0),[rRecs,subjects,cats]);
   const rByContent = useMemo(()=>{const mp={}; rRecs.forEach((r)=>{mp[r.subjectId]=(mp[r.subjectId]||0)+r.duration;}); return Object.entries(mp).map(([id,mins])=>{const s=gS(id); return s?{name:s.name.length>20?s.name.slice(0,20)+"…":s.name,horas:+(mins/60).toFixed(1),color:s.color}:null;}).filter(Boolean).sort((a,b)=>b.horas-a.horas).slice(0,8);}, [rRecs,gS]);
   const rTop = useMemo(()=>{const mp={}; rRecs.forEach((r)=>{mp[r.subjectId]=(mp[r.subjectId]||0)+r.duration;}); return Object.entries(mp).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([id,m])=>{const s=gS(id); return s?{...s,mins:m,pct:rT>0?Math.round(m/rT*100):0}:null;}).filter(Boolean);}, [rRecs,rT,gS]);
 
@@ -715,7 +761,7 @@ export default function EstudoFlow({ user }) {
             <button onClick={()=>openRec()} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[11px] font-bold shadow-md"><Plus size={13}/><span className="hidden sm:inline">Registro</span></button>
             <button onClick={resetAll} title="Resetar tudo" className={`p-1.5 rounded-lg transition ${dk?"hover:bg-white/10 text-gray-500":"hover:bg-gray-100 text-gray-400"}`}><RotateCcw size={15}/></button>
             <div className={`flex items-center gap-1.5 pl-2 ml-0.5 ${dk?"border-l border-white/10":"border-l border-gray-200"}`}>
-              <button onClick={openProfile} className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-sm hover:scale-105 transition-transform">{profile.emoji}</button>
+              <button onClick={openProfile} className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-sm hover:scale-105 transition-transform">{profile.avatar?<img src={profile.avatar} alt="" className="w-full h-full object-cover"/>:profile.emoji}</button>
               <span className={`text-xs font-semibold ${tx} hidden md:block`}>{profile.name}</span>
               <button onClick={()=>setDk(!dk)} className={`p-1.5 rounded-lg transition ${dk?"bg-yellow-500/20 text-yellow-400":"bg-indigo-50 text-indigo-500"}`}>{dk?<Sun size={15}/>:<Moon size={15}/>}</button>
               <button onClick={sair} title="Sair" className={`p-1.5 rounded-lg transition ${dk?"hover:bg-red-500/20 text-red-400":"hover:bg-red-50 text-red-500"}`}><LogOut size={15}/></button>
@@ -754,7 +800,7 @@ export default function EstudoFlow({ user }) {
                               return <button key={s.id} onClick={()=>{setTText(s.name);setTCat(s.category);setTDrop(false);}} className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition ${dk?"hover:bg-white/10":"hover:bg-indigo-50"}`}>
                                 <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{background:s.color+"18"}}><Ic size={12} style={{color:s.color}}/></div>
                                 <span className={`text-xs font-semibold ${tx} truncate`}>{s.name}</span>
-                                <span className={`text-[9px] ${mu} ml-auto flex-shrink-0`}>{CATS.find(c=>c.id===s.category)?.label}</span>
+                                <span className={`text-[9px] ${mu} ml-auto flex-shrink-0`}>{cats.find(c=>c.id===s.category)?.label}</span>
                               </button>;
                             })}
                           </div>
@@ -766,7 +812,7 @@ export default function EstudoFlow({ user }) {
                         <BtnAct color="bg-amber-500" onClick={pauseT} disabled={!tOn||tP}><Pause size={13}/>Pausar</BtnAct>
                         <BtnAct color="bg-blue-500" onClick={contT} disabled={!tP}><SkipForward size={13}/>Continuar</BtnAct>
                         <BtnAct color="bg-red-500" onClick={stopT} disabled={!tOn}><Square size={11}/>Parar</BtnAct>
-                        <select value={tCat} onChange={(e)=>setTCat(e.target.value)} className={`${ip} w-auto py-2 text-xs`}>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
+                        <select value={tCat} onChange={(e)=>setTCat(e.target.value)} className={`${ip} w-auto py-2 text-xs`}>{cats.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
                       </div>
                     </div>
                     <div className="text-center flex-shrink-0 flex flex-col items-center justify-center md:min-w-[180px]">
@@ -869,15 +915,19 @@ export default function EstudoFlow({ user }) {
             {/* CONTEÚDOS */}
             {pg==="Conteúdos"&&(
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className={`text-xs ${mu}`}>{subjects.length} conteúdos</p>
-                  <button onClick={openAddSub} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow-md"><Plus size={14}/>Novo</button>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className={`text-xs ${mu}`}>{subjects.length} conteúdos · {cats.length} categorias</p>
+                  <div className="flex gap-2">
+                    <button onClick={()=>setMt("cats")} className={`flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Palette size={14}/>Categorias</button>
+                    <button onClick={openAddSub} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow-md"><Plus size={14}/>Novo</button>
+                  </div>
                 </div>
-                {CATS.map((cat)=>{
+                {cats.map((cat)=>{
                   const sbs=subjects.filter((s)=>s.category===cat.id);
                   if(!sbs.length) return null;
+                  const CatIc=gI(cat.icon);
                   return <div key={cat.id}>
-                    <div className="flex items-center gap-1.5 mb-2"><cat.icon size={14} style={{color:cat.color}}/><span className={`text-[11px] font-bold ${tx} uppercase tracking-wider`}>{cat.label}</span><span className={`text-[10px] ${mu}`}>({sbs.length})</span></div>
+                    <div className="flex items-center gap-1.5 mb-2"><CatIc size={14} style={{color:cat.color}}/><span className={`text-[11px] font-bold ${tx} uppercase tracking-wider`}>{cat.label}</span><span className={`text-[10px] ${mu}`}>({sbs.length})</span></div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                       {sbs.map((sub)=>{const Ic=gI(sub.icon); const tH=(records.filter((r)=>r.subjectId===sub.id).reduce((a,r)=>a+r.duration,0)/60).toFixed(1); return(
                         <div key={sub.id} className={`${cd} rounded-xl p-3 flex items-center gap-3 group`}>
@@ -900,7 +950,7 @@ export default function EstudoFlow({ user }) {
               <div className="space-y-3">
                 <div className={`${cd} rounded-xl p-2.5 flex flex-wrap gap-2 items-center`}>
                   <Filter size={13} className={mu}/>
-                  <select value={hC} onChange={(e)=>{setHC(e.target.value);setHS("all");}} className={`${ip} w-auto text-xs py-2`}><option value="all">Todas categorias</option>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
+                  <select value={hC} onChange={(e)=>{setHC(e.target.value);setHS("all");}} className={`${ip} w-auto text-xs py-2`}><option value="all">Todas categorias</option>{cats.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
                   <select value={hS} onChange={(e)=>setHS(e.target.value)} className={`${ip} w-auto text-xs py-2`}><option value="all">Todos os conteúdos</option>{subjects.filter((s)=>hC==="all"||s.category===hC).map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
                   <span className={`text-[10px] ${mu} ml-auto`}>{hData.length} registros · {(hData.reduce((a,r)=>a+r.duration,0)/60).toFixed(1)}h</span>
                 </div>
@@ -992,7 +1042,7 @@ export default function EstudoFlow({ user }) {
                 <div className={`${cd} rounded-xl p-4`}>
                   <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Perfil</p>
                   <div className="flex items-center gap-3">
-                    <button onClick={()=>setMt("avatar")} className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-xl hover:scale-105 transition shadow-lg">{profile.emoji}</button>
+                    <button onClick={()=>setMt("avatar")} className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-xl hover:scale-105 transition shadow-lg">{profile.avatar?<img src={profile.avatar} alt="" className="w-full h-full object-cover"/>:profile.emoji}</button>
                     <div className="flex-1"><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome</label><input value={profile.name} onChange={(e)=>setProfile((p)=>({...p,name:e.target.value}))} className={ip}/></div>
                   </div>
                 </div>
@@ -1000,7 +1050,7 @@ export default function EstudoFlow({ user }) {
                 <div className={`${cd} rounded-xl p-4`}>
                   <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Conta</p>
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-base flex-shrink-0">{profile.emoji}</div>
+                    <div className="w-9 h-9 rounded-lg overflow-hidden bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-base flex-shrink-0">{profile.avatar?<img src={profile.avatar} alt="" className="w-full h-full object-cover"/>:profile.emoji}</div>
                     <div className="flex-1 min-w-0">
                       <p className={`text-[12px] font-bold ${tx} truncate`}>{profile.name}</p>
                       <p className={`text-[10px] ${mu} truncate`}>{user?.email}</p>
@@ -1032,37 +1082,16 @@ export default function EstudoFlow({ user }) {
                     <button onClick={()=>{ const json=JSON.stringify({subjects,records,goals,profile,dark:dk}); if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(json).then(()=>flash("Backup copiado!")).catch(()=>flash("Não foi possível copiar")); } else flash("Clipboard indisponível"); }} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Download size={13}/>Copiar backup</button>
                   </div>
                 </div>
-                {/* INTELIGÊNCIA ARTIFICIAL (chave do próprio usuário) */}
-                <div className={`${cd} rounded-xl p-4`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles size={14} className="text-indigo-400"/>
-                    <p className={`text-[11px] font-bold ${tx}`}>Inteligência Artificial</p>
-                    <div className={`ml-auto px-2 py-0.5 rounded-full text-[9px] font-bold ${aiKey.trim()?"bg-emerald-500/15 text-emerald-500":"bg-amber-500/15 text-amber-500"}`}>{aiKey.trim()?"Configurada":"Não configurada"}</div>
-                  </div>
-                  <p className={`text-[10px] ${mu} mb-3`}>Use sua <b>própria</b> chave para gerar flashcards/resumos. Ela fica salva só neste navegador — não enviamos nem guardamos a chave de ninguém.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Provedor</label>
-                      <select value={aiProvider} onChange={(e)=>setAiProvider(e.target.value)} className={ip}><option value="gemini">Google Gemini</option><option value="openai">OpenAI (GPT)</option><option value="anthropic">Anthropic (Claude)</option></select>
-                    </div>
-                    <div className="sm:col-span-2"><label className={`text-[9px] ${mu} mb-0.5 block`}>Sua chave de API</label>
-                      <input type="password" value={aiKey} onChange={(e)=>setAiKey(e.target.value)} className={ip} placeholder="cole sua chave aqui"/>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {aiKey&&<button onClick={()=>{setAiKey("");flash("Chave removida");}} className={`text-[10px] font-bold px-2 py-1 rounded ${dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Remover chave</button>}
-                    <a href={aiProvider==='openai'?"https://platform.openai.com/api-keys":aiProvider==='anthropic'?"https://console.anthropic.com/settings/keys":"https://aistudio.google.com/app/apikey"} target="_blank" rel="noreferrer" className="text-[10px] font-bold px-2 py-1 rounded bg-indigo-500/15 text-indigo-500">Onde pegar a chave →</a>
-                  </div>
-                </div>
                 <div className={`${cd} rounded-xl p-4`}>
                   <div className="flex items-center justify-between mb-3">
                     <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest`}>Metas</p>
                     <button onClick={openAddGoal} className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow"><Plus size={12}/>Nova</button>
                   </div>
                   <div className="space-y-2.5">
-                    {goals.map((g)=>{const pct=gPct(g),days=gDL(g),ci=CATS.find((c)=>c.id===g.category); return(
+                    {goals.map((g)=>{const pct=gPct(g),days=gDL(g),ci=cats.find((c)=>c.id===g.category); const CiIc=ci?gI(ci.icon):null; return(
                       <div key={g.id} className={`p-3 rounded-lg ${dk?"bg-white/[0.04]":"bg-gray-50"} group`}>
                         <div className="flex items-center justify-between mb-1.5">
-                          <div className="flex items-center gap-1.5 min-w-0">{ci&&<ci.icon size={12} style={{color:ci.color}}/>}<span className={`text-[12px] font-bold ${tx} truncate`}>{g.title}</span></div>
+                          <div className="flex items-center gap-1.5 min-w-0">{CiIc&&<CiIc size={12} style={{color:ci.color}}/>}<span className={`text-[12px] font-bold ${tx} truncate`}>{g.title}</span></div>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             {days!==null?<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${days<=7?"bg-red-500/15 text-red-400":"bg-indigo-500/15 text-indigo-400"}`}>{days}d</span>:<span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">Sem prazo</span>}
                             <button onClick={()=>openEditGoal(g)} className="p-1 rounded opacity-0 group-hover:opacity-100 transition"><Edit3 size={11} className={mu}/></button>
@@ -1240,52 +1269,37 @@ export default function EstudoFlow({ user }) {
               </div>
             )}
 
-            {/* CRONOGRAMA */}
+            {/* CRONOGRAMA (editável, com horários) */}
             {pg==="Cronograma"&&(
-              <div className="space-y-4">
-                <div className={`${cd} rounded-xl p-4`}>
-                  <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Gerar cronograma da semana</p>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {DOW.map((d)=>(
-                      <button key={d} onClick={()=>setSchDays((p)=>p.includes(d)?p.filter((x)=>x!==d):[...p,d])} className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${schDays.includes(d)?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}>{d}</button>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap items-end gap-3">
-                    <div><label className={`text-[10px] ${mu} mb-0.5 block`}>Blocos por dia</label><input type="number" min="1" max="8" value={schBlocks} onChange={(e)=>setSchBlocks(Math.max(1,Math.min(8,parseInt(e.target.value)||1)))} className={`${ip} w-28`}/></div>
-                    <button onClick={gerarCronograma} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-bold shadow"><Zap size={15}/>Gerar</button>
-                    {schedule&&<button onClick={()=>setSchedule(null)} className={`px-3 py-2.5 rounded-xl text-sm font-bold ${dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Limpar</button>}
-                  </div>
-                  <p className={`text-[10px] ${mu} mt-2`}>Distribui os conteúdos (sorteados) nos dias escolhidos.</p>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {subjects.map((s)=>{const on=schSubs.includes(s.id); return (
-                      <button key={s.id} onClick={()=>setSchSubs((p)=>p.includes(s.id)?p.filter((x)=>x!==s.id):[...p,s.id])} className="text-[10px] font-semibold px-2 py-0.5 rounded-full border transition" style={on?{background:s.color,color:'#fff',borderColor:s.color}:{borderColor:s.color,color:s.color}}>{s.name}</button>
-                    );})}
-                  </div>
-                  {schSubs.length>0&&<p className={`text-[9px] ${mu} mt-1`}>{schSubs.length} selecionados (vazio = todos)</p>}
-                </div>
-                {schedule?(
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                    {schedule.days.map((d)=>(
-                      <div key={d} className={`${cd} rounded-xl p-3`}>
-                        <p className={`text-[12px] font-bold ${tx} mb-2`}>{d}</p>
-                        <div className="space-y-1.5">
-                          {schedule.grid[d].map((sid,i)=>{const s=gS(sid); const Ic=s?gI(s.icon):BookOpen; return (
-                            <div key={i} className="flex items-center gap-2 p-2 rounded-lg" style={{background:(s?s.color:'#888')+"15"}}>
-                              <Ic size={13} style={{color:s?s.color:'#888'}}/>
-                              <span className={`text-[11px] font-semibold ${tx} truncate`}>{s?s.name:"—"}</span>
-                            </div>
-                          );})}
-                        </div>
+              <div className="space-y-3">
+                <p className={`text-xs ${mu}`}>Monte sua semana: em cada dia, adicione conteúdos com horário e duração. Edite ou remova quando quiser.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {DOW.map((d)=>{const items=[...(sched[d]||[])].sort((a,b)=>(a.start||"").localeCompare(b.start||"")); const totMin=items.reduce((a,it)=>a+(it.dur||0),0); return (
+                    <div key={d} className={`${cd} rounded-xl p-3`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className={`text-[12px] font-bold ${tx}`}>{d}</p>
+                        <span className={`text-[9px] ${mu}`}>{totMin>0?fmtDur(totMin):""}</span>
                       </div>
-                    ))}
-                  </div>
-                ):(
-                  <div className={`${cd} rounded-xl p-10 text-center`}>
-                    <CalendarRange size={32} className={`mx-auto mb-2 ${mu}`}/>
-                    <p className={`text-sm font-bold ${tx}`}>Nenhum cronograma ainda</p>
-                    <p className={`text-xs ${mu}`}>Escolha os dias e clique em Gerar 👆</p>
-                  </div>
-                )}
+                      <div className="space-y-1.5">
+                        {items.map((it)=>{const s=gS(it.subjectId); const Ic=s?gI(s.icon):BookOpen; return (
+                          <div key={it.id} className="flex items-center gap-2 p-2 rounded-lg group/it" style={{background:(s?s.color:'#888')+"15"}}>
+                            <Ic size={13} style={{color:s?s.color:'#888'}} className="flex-shrink-0"/>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-[11px] font-semibold ${tx} truncate`}>{s?s.name:"—"}</p>
+                              <p className={`text-[9px] ${mu}`}>{it.start}{it.dur?` · ${fmtDur(it.dur)}`:""}</p>
+                            </div>
+                            <div className="flex gap-0.5 opacity-0 group-hover/it:opacity-100 transition flex-shrink-0">
+                              <button onClick={()=>openEditSched(d,it)} className={`p-1 rounded ${dk?"hover:bg-white/10":"hover:bg-white/60"}`}><Edit3 size={11} className={mu}/></button>
+                              <button onClick={()=>delSched(d,it.id)} className="p-1 rounded hover:bg-red-500/10"><Trash2 size={11} className="text-red-400"/></button>
+                            </div>
+                          </div>
+                        );})}
+                        <button onClick={()=>openAddSched(d)} disabled={subjects.length===0} className={`w-full py-1.5 rounded-lg border-2 border-dashed text-[11px] font-bold flex items-center justify-center gap-1 transition disabled:opacity-40 ${dk?"border-white/10 text-gray-400 hover:bg-white/5":"border-gray-300 text-gray-500 hover:bg-gray-50"}`}><Plus size={12}/>Adicionar</button>
+                      </div>
+                    </div>
+                  );})}
+                </div>
+                {subjects.length===0&&<p className={`text-xs ${mu} text-center`}>Cadastre conteúdos primeiro (em "Conteúdos") para montar o cronograma.</p>}
               </div>
             )}
 
@@ -1295,10 +1309,7 @@ export default function EstudoFlow({ user }) {
                 {fcView==="decks"&&(<>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <p className={`text-xs ${mu}`}>{decks.length} baralhos · {cards.length} cartas</p>
-                    <div className="flex gap-2">
-                      <button onClick={openAI} className={`flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-white/5 text-indigo-300 hover:bg-white/10":"bg-indigo-50 text-indigo-600 hover:bg-indigo-100"}`}><Sparkles size={14}/>Gerar com IA</button>
-                      <button onClick={openAddDeck} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Novo baralho</button>
-                    </div>
+                    <button onClick={openAddDeck} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Novo baralho</button>
                   </div>
                   {(()=>{ const s=fcStreakInfo(fcDays); return (
                     <div className="relative overflow-hidden rounded-2xl p-4 bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 text-white">
@@ -1333,7 +1344,7 @@ export default function EstudoFlow({ user }) {
                           <p className={`text-sm font-bold ${tx} mt-2 truncate`}>{d.name}</p>
                           <p className={`text-[11px] ${mu}`}>{total} cartas · {due>0?<span className="text-indigo-500 font-bold">{due} para revisar</span>:"em dia ✓"}</p>
                           <div className="flex gap-2 mt-3">
-                            <button onClick={()=>startStudy(d.id)} disabled={due===0} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold shadow disabled:opacity-40"><Brain size={14}/>Estudar{due>0?` (${due})`:""}</button>
+                            <button onClick={()=>openStudy(d.id)} disabled={total===0} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold shadow disabled:opacity-40"><Brain size={14}/>Estudar{due>0?` (${due})`:""}</button>
                             <button onClick={()=>{setFcDeck(d.id);setFcView("cards");}} className={`px-3 py-2 rounded-lg text-xs font-bold ${dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Cartas</button>
                           </div>
                         </div>
@@ -1355,7 +1366,7 @@ export default function EstudoFlow({ user }) {
                           <p className={`text-[13px] font-semibold ${tx} whitespace-pre-wrap break-words`}>{c.front}</p>
                           <p className={`text-[12px] ${mu} mt-0.5 whitespace-pre-wrap break-words line-clamp-3`}>{c.back}</p>
                         </div>
-                        <span className={`text-[9px] ${mu} flex-shrink-0`}>{c.due?("rev "+c.due.split("-").reverse().slice(0,2).join("/")):"nova"}</span>
+                        <span className={`text-[9px] ${mu} flex-shrink-0 text-right leading-tight`}>{c.due?("rev "+c.due.split("-").reverse().slice(0,2).join("/")):"nova"}<br/><span className="inline-flex items-center gap-0.5"><Eye size={8}/>{c.views||0}</span></span>
                         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
                           <button onClick={()=>openEditCard(c)} className={`p-1.5 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
                           <button onClick={()=>delCard(c.id)} className="p-1.5 rounded-md hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
@@ -1382,7 +1393,8 @@ export default function EstudoFlow({ user }) {
                         <button onClick={()=>setFcView("decks")} className={`flex items-center gap-1 text-xs font-bold ${mu} hover:underline`}><ArrowLeft size={14}/>Sair</button>
                         <span className={`text-xs font-bold ${mu}`}>{fcQueue.length} restantes</span>
                       </div>
-                      <div className={`${cd} rounded-2xl p-6 md:p-8 min-h-[220px] flex flex-col`}>
+                      <div className={`${cd} rounded-2xl p-6 md:p-8 min-h-[220px] flex flex-col relative`}>
+                        <span className={`absolute top-2.5 right-3 text-[9px] ${mu} flex items-center gap-0.5`} title="Vezes que você já viu esta carta"><Eye size={9}/>{card.views||0}</span>
                         <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3 text-center`}>Frente</p>
                         <p className={`text-lg font-bold ${tx} text-center whitespace-pre-wrap break-words`}>{card.front}</p>
                         {fcShow&&<><div className={`w-full my-4 border-t border-dashed ${dk?"border-white/10":"border-gray-200"}`}/><p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2 text-center`}>Verso</p><p className={`text-sm md:text-[15px] leading-relaxed whitespace-pre-wrap break-words ${dk?"text-gray-200":"text-gray-700"}`}>{card.back}</p></>}
@@ -1520,11 +1532,15 @@ export default function EstudoFlow({ user }) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {[
                       {i:Clock,c:"#6366f1",t:"Cronometrar sessões",d:"Inicie, pause e retome — cada sessão vira registro automático."},
-                      {i:BookOpen,c:"#f59e0b",t:"Organizar conteúdos",d:"Matérias, treinos e livros com ícone e cor próprios."},
-                      {i:Target,c:"#10b981",t:"Definir metas",d:"Metas de horas com prazo e barra de progresso."},
-                      {i:BarChart3,c:"#8b5cf6",t:"Ver relatórios",d:"Gráficos por dia, semana, mês e ano + ranking."},
-                      {i:Award,c:"#ec4899",t:"Gerar certificado",d:"Relatório em PDF e certificado de horas com seu nome."},
-                      {i:Cloud,c:"#06b6d4",t:"Acessar de qualquer lugar",d:"Dados sincronizados e seguros, no PC ou no celular."},
+                      {i:Timer,c:"#f43f5e",t:"Foco com Pomodoro",d:"Ciclos de foco e pausa; o tempo entra no seu histórico."},
+                      {i:BookOpen,c:"#f59e0b",t:"Organizar conteúdos",d:"Crie conteúdos e suas próprias categorias (cor e ícone)."},
+                      {i:ListTodo,c:"#3b82f6",t:"Tarefas & Quadro Kanban",d:"To-do e quadro com colunas próprias, recorrência e checklist."},
+                      {i:CalendarRange,c:"#14b8a6",t:"Cronograma da semana",d:"Monte sua semana com horários e duração por conteúdo."},
+                      {i:Layers,c:"#8b5cf6",t:"Flashcards",d:"Baralhos com repetição espaçada e sequência de estudo."},
+                      {i:Target,c:"#10b981",t:"Metas",d:"Metas de horas com prazo e barra de progresso."},
+                      {i:Trophy,c:"#eab308",t:"Conquistas",d:"XP, níveis, troféus, desafio semanal e sequências."},
+                      {i:BarChart3,c:"#0ea5e9",t:"Relatórios & certificado",d:"Gráficos por período, ranking e certificado de horas em PDF."},
+                      {i:Cloud,c:"#06b6d4",t:"Na nuvem, em qualquer lugar",d:"Tudo sincronizado e privado, no PC ou no celular."},
                     ].map((f,i)=>(
                       <div key={i} className={`rounded-xl p-3.5 ${dk?"bg-white/[0.03]":"bg-gray-50"}`}>
                         <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-2" style={{background:f.c+"1f"}}><f.i size={17} style={{color:f.c}}/></div>
@@ -1567,7 +1583,7 @@ export default function EstudoFlow({ user }) {
       <Mdl open={mt==="addRec"} onClose={cl} title="Adicionar Registro" dk={dk}>
         <div className="space-y-2.5">
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Data</label><input type="date" value={mDate} onChange={(e)=>smDate(e.target.value)} className={ip}/></div>
-          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Categoria</label><select value={mRecCat} onChange={(e)=>{setMRecCat(e.target.value); const f=subjects.filter(s=>e.target.value==="all"||s.category===e.target.value); if(f.length>0)smSub(f[0].id);}} className={ip}><option value="all">Todas</option>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Categoria</label><select value={mRecCat} onChange={(e)=>{setMRecCat(e.target.value); const f=subjects.filter(s=>e.target.value==="all"||s.category===e.target.value); if(f.length>0)smSub(f[0].id);}} className={ip}><option value="all">Todas</option>{cats.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Conteúdo</label><select value={mSub} onChange={(e)=>smSub(e.target.value)} className={ip}>{subjects.filter(s=>mRecCat==="all"||s.category===mRecCat).map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Duração (min)</label><input type="number" min="1" value={mDur} onChange={(e)=>smDur(e.target.value)} className={ip}/></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Notas</label><input value={mNotes} onChange={(e)=>smNotes(e.target.value)} placeholder="Opcional..." className={ip}/></div>
@@ -1578,7 +1594,7 @@ export default function EstudoFlow({ user }) {
       <Mdl open={mt==="addSub"||mt==="editSub"} onClose={cl} title={mt==="addSub"?"Novo Conteúdo":"Editar Conteúdo"} dk={dk}>
         <div className="space-y-2.5">
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome</label><input value={mName} onChange={(e)=>smName(e.target.value)} className={ip} placeholder="Ex: Fundamentos de Teste"/></div>
-          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Categoria</label><select value={mCat} onChange={(e)=>smCat(e.target.value)} className={ip}>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Categoria</label><select value={mCat} onChange={(e)=>smCat(e.target.value)} className={ip}>{cats.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Cor</label><div className="flex gap-1.5 flex-wrap">{COLS.map((c)=><button key={c} onClick={()=>smColor(c)} className={`w-6 h-6 rounded-md transition ${mColor===c?"scale-110 ring-2 ring-offset-1 ring-indigo-500":""}`} style={{background:c}}/>)}</div></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Ícone</label><div className="flex gap-1 flex-wrap">{ICO.map((ic)=>{const IC=ic.c; return <button key={ic.n} onClick={()=>smIcon(ic.n)} className={`w-7 h-7 rounded-md flex items-center justify-center transition ${mIcon===ic.n?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><IC size={13}/></button>;})}</div></div>
           <button onClick={()=>{if(!mName) return; if(mt==="addSub"){setSubjects((p)=>[...p,{id:uid(),name:mName,icon:mIcon,color:mColor,category:mCat}]);flash("Criado!");}else{setSubjects((p)=>p.map((s)=>s.id===mId?{...s,name:mName,icon:mIcon,color:mColor,category:mCat}:s));flash("Atualizado!");} cl();}} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{mt==="addSub"?"Criar":"Salvar"}</button>
@@ -1588,7 +1604,7 @@ export default function EstudoFlow({ user }) {
       <Mdl open={mt==="addGoal"||mt==="editGoal"} onClose={cl} title={mt==="addGoal"?"Nova Meta":"Editar Meta"} dk={dk}>
         <div className="space-y-2.5">
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Título</label><input value={mTitle} onChange={(e)=>smTitle(e.target.value)} className={ip} placeholder="Ex: Certificação CTFL"/></div>
-          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Categoria</label><select value={mCat} onChange={(e)=>smCat(e.target.value)} className={ip}>{CATS.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Categoria</label><select value={mCat} onChange={(e)=>smCat(e.target.value)} className={ip}>{cats.map((c)=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Meta (horas)</label><input type="number" min="1" value={mTH} onChange={(e)=>smTH(parseInt(e.target.value)||0)} className={ip}/></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Data Início</label><input type="date" value={mSD} onChange={(e)=>smSD(e.target.value)} className={ip}/></div>
           <div className="flex items-center gap-2"><label className={`text-[10px] ${mu}`}>Data fim?</label><button onClick={()=>smHE(!mHE)} className={`w-9 h-5 rounded-full transition flex items-center px-0.5 ${mHE?"bg-indigo-500":"bg-gray-300"}`}><div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${mHE?"translate-x-4":""}`}/></button></div>
@@ -1599,14 +1615,59 @@ export default function EstudoFlow({ user }) {
 
       <Mdl open={mt==="profile"} onClose={cl} title="Editar Perfil" dk={dk}>
         <div className="space-y-3">
-          <div className="flex justify-center"><button onClick={()=>setMt("avatar")} className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-2xl hover:scale-105 transition shadow-lg">{profile.emoji}</button></div>
+          <div className="flex justify-center"><button onClick={()=>setMt("avatar")} className="w-14 h-14 rounded-xl overflow-hidden bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-2xl hover:scale-105 transition shadow-lg">{profile.avatar?<img src={profile.avatar} alt="" className="w-full h-full object-cover"/>:profile.emoji}</button></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome</label><input value={mPN} onChange={(e)=>smPN(e.target.value)} className={ip}/></div>
           <button onClick={()=>{setProfile((p)=>({...p,name:mPN||p.name}));flash("Salvo!");cl();}} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>Salvar</button>
         </div>
       </Mdl>
 
       <Mdl open={mt==="avatar"} onClose={cl} title="Avatar" dk={dk}>
-        <div className="grid grid-cols-6 gap-2">{EMO.map((em)=><button key={em} onClick={()=>{setProfile((p)=>({...p,emoji:em}));flash("Avatar!");cl();}} className={`w-10 h-10 rounded-lg text-lg flex items-center justify-center transition hover:scale-110 ${profile.emoji===em?"ring-2 ring-indigo-500 bg-indigo-500/20":""} ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}>{em}</button>)}</div>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 rounded-xl overflow-hidden bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-2xl flex-shrink-0">{profile.avatar?<img src={profile.avatar} alt="" className="w-full h-full object-cover"/>:profile.emoji}</div>
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow cursor-pointer w-max"><ImageIcon size={13}/>Enviar foto<input type="file" accept="image/*" className="hidden" onChange={(e)=>onPickAvatar(e.target.files&&e.target.files[0])}/></label>
+              {profile.avatar&&<button onClick={()=>{setProfile((p)=>({...p,avatar:""}));flash("Foto removida");}} className={`text-[11px] font-bold px-3 py-1.5 rounded-lg ${dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Remover foto e usar emoji</button>}
+            </div>
+          </div>
+          <p className={`text-[10px] ${mu} uppercase tracking-widest font-bold`}>Ou escolha um emoji</p>
+          <div className="grid grid-cols-6 gap-2">{EMO.map((em)=><button key={em} onClick={()=>{setProfile((p)=>({...p,emoji:em,avatar:""}));flash("Avatar!");cl();}} className={`w-10 h-10 rounded-lg text-lg flex items-center justify-center transition hover:scale-110 ${(!profile.avatar&&profile.emoji===em)?"ring-2 ring-indigo-500 bg-indigo-500/20":""} ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}>{em}</button>)}</div>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="cats"} onClose={cl} title="Categorias" dk={dk}>
+        <div className="space-y-2">
+          {cats.map((c)=>{const Ic=gI(c.icon); return (
+            <div key={c.id} className={`flex items-center gap-2.5 rounded-lg p-2.5 ${dk?"bg-white/[0.04]":"bg-gray-50"}`}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:c.color+"22"}}><Ic size={15} style={{color:c.color}}/></div>
+              <span className={`text-[13px] font-semibold ${tx} flex-1 truncate`}>{c.label}</span>
+              <span className={`text-[10px] ${mu}`}>{subjects.filter((s)=>s.category===c.id).length}</span>
+              <button onClick={()=>openEditCat(c)} className={`p-1.5 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
+              {cats.length>1&&<button onClick={()=>delCategory(c.id)} className="p-1.5 rounded-md hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>}
+            </div>
+          );})}
+          <button onClick={openAddCat} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Plus size={14}/>Nova categoria</button>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="cat"} onClose={cl} title={catId?"Editar Categoria":"Nova Categoria"} dk={dk}>
+        <div className="space-y-2.5">
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome</label><input value={catLabel} onChange={(e)=>setCatLabel(e.target.value)} className={ip} placeholder="Ex: Idiomas, Trabalho, Música..." autoFocus/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Cor</label><div className="flex gap-1.5 flex-wrap">{COLS.map((c)=><button key={c} onClick={()=>setCatColor(c)} className={`w-6 h-6 rounded-md transition ${catColor===c?"scale-110 ring-2 ring-offset-1 ring-indigo-500":""}`} style={{background:c}}/>)}</div></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Ícone</label><div className="flex gap-1 flex-wrap">{ICO.map((ic)=>{const IC=ic.c; return <button key={ic.n} onClick={()=>setCatIcon(ic.n)} className={`w-7 h-7 rounded-md flex items-center justify-center transition ${catIcon===ic.n?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-400":"bg-gray-100 text-gray-500"}`}><IC size={13}/></button>;})}</div></div>
+          <button onClick={saveCategory} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{catId?"Salvar":"Criar"}</button>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="sched"} onClose={cl} title={`${siId?"Editar":"Adicionar"} — ${siDay}`} dk={dk}>
+        <div className="space-y-2.5">
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Conteúdo</label><select value={siSub} onChange={(e)=>setSiSub(e.target.value)} className={ip}>{subjects.map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Horário</label><input type="time" value={siStart} onChange={(e)=>setSiStart(e.target.value)} className={ip}/></div>
+            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Duração (min)</label><input type="number" min="0" step="5" value={siDur} onChange={(e)=>setSiDur(e.target.value)} className={ip} placeholder="ex: 60"/></div>
+          </div>
+          <button onClick={saveSched} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{siId?"Salvar":"Adicionar"}</button>
+        </div>
       </Mdl>
 
       <Mdl open={mt==="task"} onClose={cl} title={tkId?"Editar Tarefa":"Nova Tarefa"} dk={dk}>
@@ -1674,27 +1735,26 @@ export default function EstudoFlow({ user }) {
         </div>
       </Mdl>
 
-      <Mdl open={mt==="ai"} onClose={cl} title="Gerar com IA" dk={dk}>
-        <div className="space-y-2.5">
-          <p className={`text-[11px] ${mu}`}>Cole um texto (resumo de aula, artigo, anotações) e a IA cria flashcards + um resumo.</p>
-          {!aiKey.trim()&&<div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-100 text-[11px] text-amber-700">⚠️ Você ainda não configurou sua chave de IA. Vá em <b>Configurações ▸ Inteligência Artificial</b> e cole a sua (cada um usa a própria).</div>}
-          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Texto base</label><textarea value={aiText} onChange={(e)=>setAiText(e.target.value)} rows={6} className={ip} placeholder="Cole aqui o conteúdo..." autoFocus/></div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Baralho (cria se não existir)</label><input value={aiDeckName} onChange={(e)=>setAiDeckName(e.target.value)} className={ip}/></div>
-            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Qtde de cartões</label><input type="number" min="1" max="30" value={aiCount} onChange={(e)=>setAiCount(Math.max(1,Math.min(30,parseInt(e.target.value)||8)))} className={ip}/></div>
-          </div>
-          {aiError&&<div className="px-3 py-2 rounded-lg bg-red-50 border border-red-100 text-[12px] font-medium text-red-600">{aiError}</div>}
-          {aiResult&&(
-            <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[12px] text-emerald-700">
-              <p className="font-bold mb-1">✓ {aiResult.count} flashcards adicionados em "{aiResult.deck}"</p>
-              {aiResult.summary&&<p className="text-[11px] text-gray-600"><span className="font-semibold">Resumo:</span> {aiResult.summary}</p>}
+      <Mdl open={mt==="study"} onClose={cl} title="Estudar baralho" dk={dk}>
+        {(()=>{ const all=cards.filter((c)=>c.deckId===studyDeck); const due=all.filter(fcDue).length; const base=studyScope==="due"?due:all.length; const pct=(p)=>Math.max(1,Math.round(base*p/100)); return (
+          <div className="space-y-3">
+            <div>
+              <label className={`text-[9px] ${mu} mb-1 block uppercase tracking-widest font-bold`}>O que estudar</label>
+              <div className="flex gap-2">
+                <button onClick={()=>setStudyScope("all")} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${studyScope==="all"?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Todas ({all.length})</button>
+                <button onClick={()=>setStudyScope("due")} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${studyScope==="due"?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Só pendentes ({due})</button>
+              </div>
             </div>
-          )}
-          <button onClick={gerarIA} disabled={aiBusy} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5 disabled:opacity-60">
-            {aiBusy?<RotateCw size={14} className="animate-spin"/>:<Sparkles size={14}/>}{aiBusy?"Gerando...":"Gerar flashcards"}
-          </button>
-          {aiResult&&<button onClick={()=>{setFcView("decks");cl();}} className={`w-full py-2 rounded-xl text-xs font-bold ${dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Ver baralhos</button>}
-        </div>
+            <div>
+              <label className={`text-[9px] ${mu} mb-1 block uppercase tracking-widest font-bold`}>Quantas cartas</label>
+              <div className="grid grid-cols-4 gap-2 mb-2">
+                {[25,50,75,100].map((p)=>(<button key={p} onClick={()=>setStudyQty(String(pct(p)))} className={`py-2 rounded-lg text-xs font-bold transition ${studyQty===String(pct(p))?"bg-indigo-500 text-white":dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>{p}%</button>))}
+              </div>
+              <input type="number" min="1" max={base||1} value={studyQty} onChange={(e)=>setStudyQty(e.target.value)} className={ip} placeholder={`Quantidade (vazio = todas: ${base})`}/>
+            </div>
+            <button onClick={beginStudy} disabled={base===0} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5 disabled:opacity-50"><Brain size={15}/>Começar</button>
+          </div>
+        ); })()}
       </Mdl>
 
       {/* PRINT */}
