@@ -237,6 +237,9 @@ export default function EstudoFlow({ user }) {
   const [fcShow, setFcShow] = useState(false);
   const [dkId, setDkId] = useState(""); const [dkName, setDkName] = useState(""); const [dkColor, setDkColor] = useState("#6366f1");
   const [cdId, setCdId] = useState(""); const [cdFront, setCdFront] = useState(""); const [cdBack, setCdBack] = useState(""); const [cdDeck, setCdDeck] = useState("");
+  // Gerador por IA
+  const [aiText, setAiText] = useState(""); const [aiDeckName, setAiDeckName] = useState(""); const [aiCount, setAiCount] = useState(8);
+  const [aiBusy, setAiBusy] = useState(false); const [aiError, setAiError] = useState(""); const [aiResult, setAiResult] = useState(null);
   const [mDate, smDate] = useState("");
   const [mSub, smSub] = useState("");
   const [mDur, smDur] = useState("60");
@@ -506,6 +509,25 @@ export default function EstudoFlow({ user }) {
     const q = cards.filter((c) => c.deckId === deckId && fcDue(c)).map((c) => c.id);
     if (!q.length) { flash("Nenhuma carta para revisar hoje 🎉"); return; }
     setFcDeck(deckId); setFcQueue(q); setFcShow(false); setFcView("study");
+  };
+  const openAI = () => { setAiText(""); setAiDeckName("IA — " + new Date().toLocaleDateString("pt-BR")); setAiCount(8); setAiError(""); setAiResult(null); setMt("ai"); };
+  const gerarIA = async () => {
+    if (aiText.trim().length < 20) { setAiError("Cole um texto maior (mín. ~20 caracteres)."); return; }
+    setAiBusy(true); setAiError(""); setAiResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-generate", { body: { text: aiText, count: parseInt(aiCount) || 8 } });
+      if (error) throw new Error(error.message || "Falha na função");
+      if (data?.error) throw new Error(data.error);
+      const fcs = data?.flashcards || [];
+      if (!fcs.length) throw new Error("A IA não retornou cartões. Tente outro texto.");
+      const name = aiDeckName.trim() || "IA";
+      let deckId; const existing = decks.find((d) => d.name.toLowerCase() === name.toLowerCase());
+      if (existing) deckId = existing.id; else { deckId = uid(); setDecks((p) => [...p, { id: deckId, name, color: COLS[decks.length % COLS.length] }]); }
+      setCards((p) => [...p, ...fcs.map((f) => ({ id: uid(), deckId, front: f.front, back: f.back, ease: 2.5, interval: 0, reps: 0, due: "", lapses: 0 }))]);
+      setAiResult({ summary: data.summary || "", count: fcs.length, deck: name });
+      flash(`${fcs.length} flashcards gerados!`);
+    } catch (e) { setAiError(String(e?.message || e)); }
+    setAiBusy(false);
   };
   const rateCard = (q) => {
     const id = fcQueue[0]; const card = cards.find((c) => c.id === id); if (!card) return;
@@ -1226,9 +1248,12 @@ export default function EstudoFlow({ user }) {
             {pg==="Flashcards"&&(
               <div className="space-y-4 max-w-4xl">
                 {fcView==="decks"&&(<>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <p className={`text-xs ${mu}`}>{decks.length} baralhos · {cards.length} cartas</p>
-                    <button onClick={openAddDeck} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Novo baralho</button>
+                    <div className="flex gap-2">
+                      <button onClick={openAI} className={`flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition ${dk?"bg-white/5 text-indigo-300 hover:bg-white/10":"bg-indigo-50 text-indigo-600 hover:bg-indigo-100"}`}><Sparkles size={14}/>Gerar com IA</button>
+                      <button onClick={openAddDeck} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Novo baralho</button>
+                    </div>
                   </div>
                   {decks.length===0?(
                     <div className={`${cd} rounded-xl p-10 text-center`}>
@@ -1578,6 +1603,28 @@ export default function EstudoFlow({ user }) {
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Frente (pergunta)</label><textarea value={cdFront} onChange={(e)=>setCdFront(e.target.value)} rows={2} className={ip} placeholder="Ex: O que significa 'ephemeral'?" autoFocus/></div>
           <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Verso (resposta)</label><textarea value={cdBack} onChange={(e)=>setCdBack(e.target.value)} rows={3} className={ip} placeholder="A resposta..."/></div>
           <button onClick={saveCard} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{cdId?"Salvar":"Criar"}</button>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="ai"} onClose={cl} title="Gerar com IA" dk={dk}>
+        <div className="space-y-2.5">
+          <p className={`text-[11px] ${mu}`}>Cole um texto (resumo de aula, artigo, anotações) e a IA cria flashcards + um resumo.</p>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Texto base</label><textarea value={aiText} onChange={(e)=>setAiText(e.target.value)} rows={6} className={ip} placeholder="Cole aqui o conteúdo..." autoFocus/></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Baralho (cria se não existir)</label><input value={aiDeckName} onChange={(e)=>setAiDeckName(e.target.value)} className={ip}/></div>
+            <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Qtde de cartões</label><input type="number" min="1" max="30" value={aiCount} onChange={(e)=>setAiCount(Math.max(1,Math.min(30,parseInt(e.target.value)||8)))} className={ip}/></div>
+          </div>
+          {aiError&&<div className="px-3 py-2 rounded-lg bg-red-50 border border-red-100 text-[12px] font-medium text-red-600">{aiError}</div>}
+          {aiResult&&(
+            <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[12px] text-emerald-700">
+              <p className="font-bold mb-1">✓ {aiResult.count} flashcards adicionados em "{aiResult.deck}"</p>
+              {aiResult.summary&&<p className="text-[11px] text-gray-600"><span className="font-semibold">Resumo:</span> {aiResult.summary}</p>}
+            </div>
+          )}
+          <button onClick={gerarIA} disabled={aiBusy} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5 disabled:opacity-60">
+            {aiBusy?<RotateCw size={14} className="animate-spin"/>:<Sparkles size={14}/>}{aiBusy?"Gerando...":"Gerar flashcards"}
+          </button>
+          {aiResult&&<button onClick={()=>{setFcView("decks");cl();}} className={`w-full py-2 rounded-xl text-xs font-bold ${dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Ver baralhos</button>}
         </div>
       </Mdl>
 
