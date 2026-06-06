@@ -34,6 +34,20 @@ const CATS = [
   { id: "exercicios", label: "Exercícios Físicos", icon: Dumbbell, color: "#10b981" },
   { id: "leituras", label: "Leituras", icon: BookMarked, color: "#f59e0b" },
 ];
+// Sequência de dias (streak) a partir de uma lista de datas YYYY-MM-DD.
+// Reset automático ao virar o dia: é tudo baseado em data, então 00:00 inicia novo dia.
+function fcStreakInfo(days) {
+  const set = new Set(days || []);
+  const sorted = [...set].sort();
+  const nextDay = (s) => { const d = pK(s); d.setDate(d.getDate() + 1); return toK(d); };
+  let best = 0, run = 0, prev = null;
+  for (const d of sorted) { run = prev && nextDay(prev) === d ? run + 1 : 1; if (run > best) best = run; prev = d; }
+  const today = toK(TODAY); const y = new Date(TODAY); y.setDate(y.getDate() - 1); const yest = toK(y);
+  let anchor = set.has(today) ? today : set.has(yest) ? yest : null;
+  let current = 0;
+  if (anchor) { let c = pK(anchor); while (set.has(toK(c))) { current++; c.setDate(c.getDate() - 1); } }
+  return { current, best, studiedToday: set.has(today), total: set.size };
+}
 const PRIOS = { alta: { l: "Alta", c: "#ef4444" }, media: { l: "Média", c: "#f59e0b" }, baixa: { l: "Baixa", c: "#10b981" } };
 const DEFAULT_COLS = [{ id: "todo", label: "A Fazer", color: "#6366f1" }, { id: "doing", label: "Fazendo", color: "#f59e0b" }, { id: "done", label: "Concluído", color: "#10b981" }];
 const ICO = [
@@ -116,6 +130,7 @@ export default function EstudoFlow({ user }) {
   const [schedule, setSchedule] = useState(null);
   const [decks, setDecks] = useState([]);
   const [cards, setCards] = useState([]);
+  const [fcDays, setFcDays] = useState([]); // dias (YYYY-MM-DD) em que estudou flashcards
   const [profile, setProfile] = useState(defaultProfile);
   const [notif, setNotif] = useState(null);
 
@@ -141,6 +156,7 @@ export default function EstudoFlow({ user }) {
         setSchedule(d.schedule || null);
         setDecks(d.decks || []);
         setCards(d.cards || []);
+        setFcDays(d.fcDays || []);
         if (d.pomo) { setPomo(d.pomo); setPmSec((d.pomo.focus || 25) * 60); }
         setProfile(d.profile || defaultProfile);
         if (typeof d.dark === "boolean") setDk(d.dark);
@@ -150,7 +166,7 @@ export default function EstudoFlow({ user }) {
         setSubjects(seed);
         setPg("Sobre");
         // cria a linha do usuário já no 1º acesso → nas próximas vezes cai no Dashboard
-        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], columns: DEFAULT_COLS, schedule: null, decks: [], cards: [], pomo, profile: defaultProfile, dark: dk }).catch(() => {});
+        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], columns: DEFAULT_COLS, schedule: null, decks: [], cards: [], fcDays: [], pomo, profile: defaultProfile, dark: dk }).catch(() => {});
       }
       setLoaded(true);
     }).catch(() => {
@@ -172,11 +188,11 @@ export default function EstudoFlow({ user }) {
     clearTimeout(saveRef.current);
     setSyncStatus("saving");
     saveRef.current = setTimeout(() => {
-      saveUserData(user.id, { subjects, records, goals, tasks, columns, schedule, decks, cards, pomo, profile, dark: dk })
+      saveUserData(user.id, { subjects, records, goals, tasks, columns, schedule, decks, cards, fcDays, pomo, profile, dark: dk })
         .then(() => setSyncStatus("saved"))
         .catch(() => setSyncStatus("error"));
     }, 1200);
-  }, [subjects, records, goals, tasks, columns, schedule, decks, cards, pomo, profile, dk, loaded, user.id]);
+  }, [subjects, records, goals, tasks, columns, schedule, decks, cards, fcDays, pomo, profile, dk, loaded, user.id]);
 
   /* ── Marca o tema no <html> (para barras de rolagem tema-aware) ── */
   useEffect(() => {
@@ -549,13 +565,14 @@ export default function EstudoFlow({ user }) {
     }
     const nd = new Date(TODAY); nd.setDate(nd.getDate() + interval);
     updateCard(id, { ease, interval, reps, due: toK(nd), lapses: (card.lapses || 0) + (q === 0 ? 1 : 0) });
+    setFcDays((p) => (p.includes(toK(TODAY)) ? p : [...p, toK(TODAY)])); // marca o dia de estudo
     setFcShow(false);
     setFcQueue((prev) => { const rest = prev.slice(1); return q === 0 ? [...rest, id] : rest; });
   };
 
   const resetAll = async () => {
     if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
-    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]); setColumns(DEFAULT_COLS); setSchedule(null); setDecks([]); setCards([]); setFcView("decks");
+    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]); setColumns(DEFAULT_COLS); setSchedule(null); setDecks([]); setCards([]); setFcDays([]); setFcView("decks");
     setSec(0); setTOn(false); setTP(false); setTText(""); setTAccum(0); setTStartedAt(null);
     setPmOn(false); setPmMode("focus"); setPmSec(pomo.focus * 60); setPmCount(0);
     setConfirmReset(false); flash("Tudo resetado!");
@@ -1283,6 +1300,19 @@ export default function EstudoFlow({ user }) {
                       <button onClick={openAddDeck} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Novo baralho</button>
                     </div>
                   </div>
+                  {(()=>{ const s=fcStreakInfo(fcDays); return (
+                    <div className="relative overflow-hidden rounded-2xl p-4 bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 text-white">
+                      <div className="absolute -top-8 -right-6 w-32 h-32 rounded-full bg-white/15 blur-2xl"/>
+                      <div className="relative flex items-center gap-4 flex-wrap">
+                        <div className="flex items-center gap-2"><Flame size={28} className={s.studiedToday?"":"opacity-70"}/><div><p className="text-3xl font-extrabold leading-none">{s.current}</p><p className="text-white/80 text-[10px] font-bold uppercase tracking-wider">dias seguidos</p></div></div>
+                        <div className="h-9 w-px bg-white/25"/>
+                        <div><p className="text-xl font-extrabold leading-none">{s.best}</p><p className="text-white/80 text-[10px] font-bold uppercase tracking-wider">recorde</p></div>
+                        <div className="h-9 w-px bg-white/25"/>
+                        <div><p className="text-xl font-extrabold leading-none">{s.total}</p><p className="text-white/80 text-[10px] font-bold uppercase tracking-wider">dias no total</p></div>
+                        <span className={`ml-auto px-2.5 py-1 rounded-full text-[10px] font-bold ${s.studiedToday?"bg-white/25":"bg-black/15"}`}>{s.studiedToday?"✓ Estudou hoje":"Estude hoje para manter 🔥"}</span>
+                      </div>
+                    </div>
+                  ); })()}
                   {decks.length===0?(
                     <div className={`${cd} rounded-xl p-10 text-center`}>
                       <Layers size={32} className={`mx-auto mb-2 ${mu}`}/>
@@ -1322,8 +1352,8 @@ export default function EstudoFlow({ user }) {
                     {cs.map((c)=>(
                       <div key={c.id} className={`${cd} rounded-xl p-3 flex items-start gap-3 group`}>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-[13px] font-semibold ${tx}`}>{c.front}</p>
-                          <p className={`text-[12px] ${mu} mt-0.5`}>{c.back}</p>
+                          <p className={`text-[13px] font-semibold ${tx} whitespace-pre-wrap break-words`}>{c.front}</p>
+                          <p className={`text-[12px] ${mu} mt-0.5 whitespace-pre-wrap break-words line-clamp-3`}>{c.back}</p>
                         </div>
                         <span className={`text-[9px] ${mu} flex-shrink-0`}>{c.due?("rev "+c.due.split("-").reverse().slice(0,2).join("/")):"nova"}</span>
                         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
@@ -1352,10 +1382,10 @@ export default function EstudoFlow({ user }) {
                         <button onClick={()=>setFcView("decks")} className={`flex items-center gap-1 text-xs font-bold ${mu} hover:underline`}><ArrowLeft size={14}/>Sair</button>
                         <span className={`text-xs font-bold ${mu}`}>{fcQueue.length} restantes</span>
                       </div>
-                      <div className={`${cd} rounded-2xl p-8 min-h-[220px] flex flex-col items-center justify-center text-center`}>
-                        <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Frente</p>
-                        <p className={`text-lg font-bold ${tx}`}>{card.front}</p>
-                        {fcShow&&<><div className={`w-full my-4 border-t border-dashed ${dk?"border-white/10":"border-gray-200"}`}/><p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Verso</p><p className={`text-base ${dk?"text-gray-200":"text-gray-700"}`}>{card.back}</p></>}
+                      <div className={`${cd} rounded-2xl p-6 md:p-8 min-h-[220px] flex flex-col`}>
+                        <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3 text-center`}>Frente</p>
+                        <p className={`text-lg font-bold ${tx} text-center whitespace-pre-wrap break-words`}>{card.front}</p>
+                        {fcShow&&<><div className={`w-full my-4 border-t border-dashed ${dk?"border-white/10":"border-gray-200"}`}/><p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2 text-center`}>Verso</p><p className={`text-sm md:text-[15px] leading-relaxed whitespace-pre-wrap break-words ${dk?"text-gray-200":"text-gray-700"}`}>{card.back}</p></>}
                       </div>
                       {!fcShow?(
                         <button onClick={()=>setFcShow(true)} className="w-full py-3 rounded-xl bg-indigo-500 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><RotateCw size={15}/>Mostrar resposta</button>
@@ -1414,6 +1444,16 @@ export default function EstudoFlow({ user }) {
                     <p className={`text-xs ${mu} mb-2`}>Estude 5 horas nesta semana {weekMin>=weekGoal&&"— concluído! 🎉"}</p>
                     <div className={`w-full h-2 rounded-full ${dk?"bg-white/10":"bg-gray-200"}`}><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all" style={{width:`${Math.min(100,Math.round(weekMin/weekGoal*100))}%`}}/></div>
                   </div>
+                  {(()=>{ const s=fcStreakInfo(fcDays); return (
+                    <div className={`${cd} rounded-xl p-4`}>
+                      <div className="flex items-center gap-2 mb-3"><Flame size={15} className="text-orange-500"/><p className={`text-sm font-bold ${tx}`}>Sequência de Flashcards</p>{s.studiedToday&&<span className="ml-auto text-[10px] font-bold text-emerald-500">✓ hoje</span>}</div>
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div><p className={`text-2xl font-extrabold ${tx}`}>{s.current}</p><p className={`text-[10px] ${mu}`}>dias seguidos</p></div>
+                        <div><p className={`text-2xl font-extrabold ${tx}`}>{s.best}</p><p className={`text-[10px] ${mu}`}>recorde</p></div>
+                        <div><p className={`text-2xl font-extrabold ${tx}`}>{s.total}</p><p className={`text-[10px] ${mu}`}>dias no total</p></div>
+                      </div>
+                    </div>
+                  ); })()}
                   <div>
                     <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Troféus</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
