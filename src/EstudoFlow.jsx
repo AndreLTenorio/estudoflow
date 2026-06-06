@@ -12,7 +12,7 @@ import {
   Download, Upload, Printer, Award, Wifi, WifiOff, Database, LogOut, KeyRound,
   Info, Sparkles, GraduationCap, Users, Rocket, Cloud,
   ListTodo, Columns3, GripVertical, Circle, CheckCircle2, Flag, ArrowRight, CalendarDays,
-  Repeat, Hourglass
+  Repeat, Hourglass, Archive, ArchiveRestore
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { loadUserData, saveUserData } from "./data";
@@ -320,6 +320,7 @@ export default function EstudoFlow({ user }) {
   };
   const updTask = (id, patch) => setTasks((p) => p.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   const delTask = (id) => { setTasks((p) => p.filter((t) => t.id !== id)); flash("Tarefa removida"); };
+  const toggleArchive = (id, val) => { updTask(id, { archived: val }); flash(val ? "Tarefa arquivada" : "Tarefa restaurada"); };
 
   const addRecurrence = (dateStr, rec) => {
     if (!dateStr) return "";
@@ -919,13 +920,13 @@ export default function EstudoFlow({ user }) {
                   <button onClick={()=>openAddTask()} className={`flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold flex-shrink-0 ${dk?"bg-white/5 text-gray-300 hover:bg-white/10":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}><Edit3 size={13}/>Detalhada</button>
                 </div>
                 <div className="flex flex-wrap gap-1.5 items-center">
-                  {[{k:"all",l:"Todas"},...columns.map((c)=>({k:c.id,l:c.label}))].map((f)=>(
+                  {[{k:"all",l:"Todas"},...columns.map((c)=>({k:c.id,l:c.label})),{k:"archived",l:`Arquivadas${tasks.filter((t)=>t.archived).length?` (${tasks.filter((t)=>t.archived).length})`:""}`}].map((f)=>(
                     <button key={f.k} onClick={()=>setTaskFilter(f.k)} className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${taskFilter===f.k?"bg-indigo-500 text-white shadow":mu}`}>{f.l}</button>
                   ))}
-                  <span className={`text-[10px] ${mu} ml-auto`}>{tasks.length} tarefas · {tasks.filter((t)=>t.status===lastCol()).length} concluídas</span>
+                  <span className={`text-[10px] ${mu} ml-auto`}>{tasks.filter((t)=>!t.archived).length} tarefas · {tasks.filter((t)=>t.status===lastCol()&&!t.archived).length} concluídas</span>
                 </div>
                 <div className="space-y-2">
-                  {tasks.filter((t)=>taskFilter==='all'||t.status===taskFilter).sort((a,b)=>{const pr={alta:0,media:1,baixa:2}; return ((a.status===lastCol())-(b.status===lastCol()))||((pr[a.priority]??1)-(pr[b.priority]??1));}).map((t)=>{
+                  {tasks.filter((t)=>taskFilter==='archived'?t.archived:(!t.archived&&(taskFilter==='all'||t.status===taskFilter))).sort((a,b)=>{const pr={alta:0,media:1,baixa:2}; return ((a.status===lastCol())-(b.status===lastCol()))||((pr[a.priority]??1)-(pr[b.priority]??1));}).map((t)=>{
                     const s=t.subjectId?gS(t.subjectId):null; const done=t.status===lastCol(); const overdue=t.due&&t.due<toK(TODAY)&&!done; const st=colOf(t.status);
                     return (
                       <div key={t.id} className={`${cd} rounded-xl p-3 flex items-center gap-3 group`}>
@@ -943,17 +944,20 @@ export default function EstudoFlow({ user }) {
                           </div>
                         </div>
                         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
+                          {t.archived
+                            ? <button onClick={()=>toggleArchive(t.id,false)} title="Restaurar" className={`p-1.5 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ArchiveRestore size={12} className="text-emerald-500"/></button>
+                            : <button onClick={()=>toggleArchive(t.id,true)} title="Arquivar" className={`p-1.5 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Archive size={12} className={mu}/></button>}
                           <button onClick={()=>openEditTask(t)} className={`p-1.5 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
                           <button onClick={()=>delTask(t.id)} className="p-1.5 rounded-md hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
                         </div>
                       </div>
                     );
                   })}
-                  {tasks.filter((t)=>taskFilter==='all'||t.status===taskFilter).length===0&&(
+                  {tasks.filter((t)=>taskFilter==='archived'?t.archived:(!t.archived&&(taskFilter==='all'||t.status===taskFilter))).length===0&&(
                     <div className={`${cd} rounded-xl p-10 text-center`}>
-                      <ListTodo size={32} className={`mx-auto mb-2 ${mu}`}/>
-                      <p className={`text-sm font-bold ${tx}`}>Nenhuma tarefa por aqui</p>
-                      <p className={`text-xs ${mu}`}>Adicione sua primeira tarefa acima 👆</p>
+                      {taskFilter==='archived'?<Archive size={32} className={`mx-auto mb-2 ${mu}`}/>:<ListTodo size={32} className={`mx-auto mb-2 ${mu}`}/>}
+                      <p className={`text-sm font-bold ${tx}`}>{taskFilter==='archived'?"Nenhuma tarefa arquivada":"Nenhuma tarefa por aqui"}</p>
+                      <p className={`text-xs ${mu}`}>{taskFilter==='archived'?"As tarefas que você arquivar aparecem aqui":"Adicione sua primeira tarefa acima 👆"}</p>
                     </div>
                   )}
                 </div>
@@ -972,7 +976,7 @@ export default function EstudoFlow({ user }) {
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2">
                   {columns.map((col)=>{
-                    const items=tasks.filter((t)=>t.status===col.id); const ci=columns.findIndex((c)=>c.id===col.id);
+                    const items=tasks.filter((t)=>t.status===col.id&&!t.archived); const ci=columns.findIndex((c)=>c.id===col.id);
                     return (
                       <div key={col.id} onDragOver={(e)=>e.preventDefault()} onDrop={()=>{ if(dragColId){reorderCol(dragColId,col.id);setDragColId(null);} else if(dragId){const tk=tasks.find((x)=>x.id===dragId); if(tk)setTaskStatus(tk,col.id); setDragId(null);} }} className={`group rounded-xl p-3 min-h-[140px] w-[270px] flex-shrink-0 transition ${dk?"bg-white/[0.03] border border-white/[0.06]":"bg-gray-100/70 border border-gray-200/60"} ${dragColId===col.id?"opacity-40":""} ${dragColId&&dragColId!==col.id?"ring-2 ring-indigo-400/50":""}`}>
                         <div className="flex items-center justify-between mb-3 px-1">
@@ -1005,7 +1009,8 @@ export default function EstudoFlow({ user }) {
                                 <div className="flex items-center gap-0.5 mt-2 pt-2 border-t border-dashed opacity-60 group-hover/card:opacity-100 transition" style={{borderColor:dk?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.08)"}}>
                                   <button disabled={ci===0} onClick={()=>moveTask(t,-1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronLeft size={13} className={mu}/></button>
                                   <button disabled={ci===columns.length-1} onClick={()=>moveTask(t,1)} className={`p-1 rounded disabled:opacity-20 ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><ChevronRight size={13} className={mu}/></button>
-                                  <button onClick={()=>openEditTask(t)} className={`p-1 rounded ml-auto ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
+                                  <button onClick={()=>toggleArchive(t.id,true)} title="Arquivar" className={`p-1 rounded ml-auto ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Archive size={12} className={mu}/></button>
+                                  <button onClick={()=>openEditTask(t)} className={`p-1 rounded ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
                                   <button onClick={()=>delTask(t.id)} className="p-1 rounded hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
                                 </div>
                               </div>
