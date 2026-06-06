@@ -45,9 +45,10 @@ pessoa tem sua própria conta e seus dados são totalmente isolados.
 - Meta principal com **anel de progresso**
 
 ### 📒 Conteúdos
-- CRUD de conteúdos organizados em 3 categorias: **Estudos**, **Exercícios Físicos** e **Leituras**
-- **Ícone** e **cor** personalizados por conteúdo
-- Total de horas acumuladas em cada um
+- CRUD de conteúdos com **ícone** e **cor** personalizados
+- **Categorias livres**: crie, edite (nome, cor, ícone) e exclua categorias à vontade
+  (vem com Estudos / Exercícios Físicos / Leituras como ponto de partida)
+- Total de horas acumuladas em cada conteúdo
 
 ### ✅ Tarefas & Kanban (integrados)
 - **Lista de tarefas** com adição rápida (Enter), prioridade, prazo, vínculo a um conteúdo e filtros por status
@@ -63,11 +64,16 @@ pessoa tem sua própria conta e seus dados são totalmente isolados.
 - Vincule um conteúdo: ao concluir o foco, o tempo é **lançado no histórico**
 
 ### 🗓️ Cronograma
-- Escolha dias da semana + blocos por dia → **distribui os conteúdos** (sorteados) automaticamente
+- **Grade semanal editável**: em cada dia, adicione conteúdos com **horário** e **duração**
+- Edite, remova ou acrescente itens livremente; ordena por horário e soma o tempo do dia
 
 ### 🃏 Flashcards (repetição espaçada)
 - Baralhos e cartas (frente/verso) com algoritmo estilo **Anki/SM-2**
 - Modo de estudo: **Errei / Difícil / Bom / Fácil** agenda a próxima revisão
+- **Estude quando quiser**: todas as cartas ou só as pendentes
+- **Escolha a quantidade**: digite o número ou use **25% / 50% / 75% / 100%**
+- **Contador de visualizações** por carta; o verso **preserva a formatação** colada
+- **Sequência (streak) de dias** estudando — exige 10 revisões/dia quando há +10 cartas
 
 ### 🏆 Conquistas (gamificação)
 - **XP e níveis** (tempo + tarefas + sequência), **desafio semanal** e **troféus** que desbloqueiam
@@ -85,7 +91,7 @@ pessoa tem sua própria conta e seus dados são totalmente isolados.
 - Defina metas de horas com **prazo** e acompanhe a % concluída e dias restantes
 
 ### ⚙️ Configurações
-- **Perfil** (nome + avatar emoji)
+- **Perfil** (nome + avatar: **foto enviada** ou emoji)
 - **Conta**: e-mail, **trocar senha**, **sair**
 - **Sincronização na nuvem**: status, recarregar e **copiar backup** (JSON)
 - **Tema Claro / Escuro** (com contraste ajustado para conforto visual)
@@ -228,11 +234,15 @@ git push        # → a Vercel builda e publica sozinha
 
 ## 🗺️ Roadmap (ideias futuras)
 
-- [ ] Autenticação de dois fatores (MFA)
-- [ ] Proteção contra senhas vazadas (HaveIBeenPwned — requer plano Pro)
-- [ ] Exportar/importar dados (backup em arquivo)
+- [ ] Grupos de estudo (compartilhar progresso / ranking entre amigos)
+- [ ] Integração com Google Calendar (provas e prazos)
+- [ ] Markdown completo no verso dos flashcards (negrito, listas, títulos)
 - [ ] Lembretes e notificações de estudo
-- [ ] Compartilhamento de conquistas
+- [ ] Autenticação de dois fatores (MFA)
+- [ ] Exportar/importar dados (backup em arquivo)
+
+> ℹ️ Para detalhes técnicos, decisões de arquitetura e "pegadinhas" do projeto,
+> veja [`CLAUDE.md`](./CLAUDE.md) e [`docs/CHANGELOG.md`](./docs/CHANGELOG.md).
 
 ---
 
