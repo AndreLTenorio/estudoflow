@@ -13,7 +13,8 @@ import {
   Info, Sparkles, GraduationCap, Users, Rocket, Cloud,
   ListTodo, Columns3, GripVertical, Circle, CheckCircle2, Flag, ArrowRight, CalendarDays,
   Repeat, Hourglass, Archive, ArchiveRestore,
-  Timer, CalendarRange, Trophy, Zap, Coffee, Star, Lock
+  Timer, CalendarRange, Trophy, Zap, Coffee, Star, Lock,
+  Layers, Brain, RotateCw, ArrowLeft
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { loadUserData, saveUserData } from "./data";
@@ -133,6 +134,8 @@ export default function EstudoFlow({ user }) {
         setTasks(d.tasks || []);
         setColumns(d.columns && d.columns.length ? d.columns : DEFAULT_COLS);
         setSchedule(d.schedule || null);
+        setDecks(d.decks || []);
+        setCards(d.cards || []);
         if (d.pomo) { setPomo(d.pomo); setPmSec((d.pomo.focus || 25) * 60); }
         setProfile(d.profile || defaultProfile);
         if (typeof d.dark === "boolean") setDk(d.dark);
@@ -142,7 +145,7 @@ export default function EstudoFlow({ user }) {
         setSubjects(seed);
         setPg("Sobre");
         // cria a linha do usuário já no 1º acesso → nas próximas vezes cai no Dashboard
-        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], columns: DEFAULT_COLS, schedule: null, pomo, profile: defaultProfile, dark: dk }).catch(() => {});
+        saveUserData(user.id, { subjects: seed, records: [], goals: [], tasks: [], columns: DEFAULT_COLS, schedule: null, decks: [], cards: [], pomo, profile: defaultProfile, dark: dk }).catch(() => {});
       }
       setLoaded(true);
     }).catch(() => {
@@ -164,11 +167,11 @@ export default function EstudoFlow({ user }) {
     clearTimeout(saveRef.current);
     setSyncStatus("saving");
     saveRef.current = setTimeout(() => {
-      saveUserData(user.id, { subjects, records, goals, tasks, columns, schedule, pomo, profile, dark: dk })
+      saveUserData(user.id, { subjects, records, goals, tasks, columns, schedule, decks, cards, pomo, profile, dark: dk })
         .then(() => setSyncStatus("saved"))
         .catch(() => setSyncStatus("error"));
     }, 1200);
-  }, [subjects, records, goals, tasks, columns, schedule, pomo, profile, dk, loaded, user.id]);
+  }, [subjects, records, goals, tasks, columns, schedule, decks, cards, pomo, profile, dk, loaded, user.id]);
 
   /* ── Marca o tema no <html> (para barras de rolagem tema-aware) ── */
   useEffect(() => {
@@ -225,6 +228,15 @@ export default function EstudoFlow({ user }) {
   const [schBlocks, setSchBlocks] = useState(3);
   const [schDays, setSchDays] = useState(["Seg", "Ter", "Qua", "Qui", "Sex"]);
   const [schSubs, setSchSubs] = useState([]);
+  // Flashcards
+  const [decks, setDecks] = useState([]);
+  const [cards, setCards] = useState([]);
+  const [fcView, setFcView] = useState("decks");
+  const [fcDeck, setFcDeck] = useState(null);
+  const [fcQueue, setFcQueue] = useState([]);
+  const [fcShow, setFcShow] = useState(false);
+  const [dkId, setDkId] = useState(""); const [dkName, setDkName] = useState(""); const [dkColor, setDkColor] = useState("#6366f1");
+  const [cdId, setCdId] = useState(""); const [cdFront, setCdFront] = useState(""); const [cdBack, setCdBack] = useState(""); const [cdDeck, setCdDeck] = useState("");
   const [mDate, smDate] = useState("");
   const [mSub, smSub] = useState("");
   const [mDur, smDur] = useState("60");
@@ -468,9 +480,53 @@ export default function EstudoFlow({ user }) {
     flash("Cronograma gerado!");
   };
 
+  // ── Flashcards (repetição espaçada estilo SM-2) ──
+  const fcDue = (c) => !c.due || c.due <= toK(TODAY);
+  const dueCount = (deckId) => cards.filter((c) => c.deckId === deckId && fcDue(c)).length;
+  const updateCard = (id, patch) => setCards((p) => p.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  const saveDeck = () => {
+    if (!dkName.trim()) return;
+    if (dkId) setDecks((p) => p.map((d) => (d.id === dkId ? { ...d, name: dkName.trim(), color: dkColor } : d)));
+    else setDecks((p) => [...p, { id: uid(), name: dkName.trim(), color: dkColor }]);
+    flash(dkId ? "Baralho atualizado!" : "Baralho criado!"); cl();
+  };
+  const delDeck = (id) => { setDecks((p) => p.filter((d) => d.id !== id)); setCards((p) => p.filter((c) => c.deckId !== id)); flash("Baralho removido"); };
+  const openAddDeck = () => { setDkId(""); setDkName(""); setDkColor("#6366f1"); setMt("deck"); };
+  const openEditDeck = (d) => { setDkId(d.id); setDkName(d.name); setDkColor(d.color); setMt("deck"); };
+  const saveCard = () => {
+    if (!cdFront.trim() || !cdBack.trim()) { flash("Preencha frente e verso"); return; }
+    if (cdId) updateCard(cdId, { front: cdFront.trim(), back: cdBack.trim(), deckId: cdDeck });
+    else setCards((p) => [...p, { id: uid(), deckId: cdDeck, front: cdFront.trim(), back: cdBack.trim(), ease: 2.5, interval: 0, reps: 0, due: "", lapses: 0 }]);
+    flash(cdId ? "Carta atualizada!" : "Carta criada!"); cl();
+  };
+  const delCard = (id) => { setCards((p) => p.filter((c) => c.id !== id)); flash("Carta removida"); };
+  const openAddCard = (deckId) => { setCdId(""); setCdFront(""); setCdBack(""); setCdDeck(deckId); setMt("card"); };
+  const openEditCard = (c) => { setCdId(c.id); setCdFront(c.front); setCdBack(c.back); setCdDeck(c.deckId); setMt("card"); };
+  const startStudy = (deckId) => {
+    const q = cards.filter((c) => c.deckId === deckId && fcDue(c)).map((c) => c.id);
+    if (!q.length) { flash("Nenhuma carta para revisar hoje 🎉"); return; }
+    setFcDeck(deckId); setFcQueue(q); setFcShow(false); setFcView("study");
+  };
+  const rateCard = (q) => {
+    const id = fcQueue[0]; const card = cards.find((c) => c.id === id); if (!card) return;
+    let ease = card.ease || 2.5, interval = card.interval || 0, reps = card.reps || 0;
+    if (q === 0) { reps = 0; interval = 0; ease = Math.max(1.3, ease - 0.2); }
+    else {
+      reps += 1;
+      if (reps === 1) interval = q === 1 ? 1 : q === 2 ? 1 : 2;
+      else if (reps === 2) interval = q === 1 ? 2 : q === 2 ? 3 : 5;
+      else interval = Math.max(1, Math.round(interval * (q === 1 ? ease * 0.8 : q === 2 ? ease : ease * 1.3)));
+      ease = Math.max(1.3, ease + (q === 3 ? 0.15 : q === 1 ? -0.15 : 0));
+    }
+    const nd = new Date(TODAY); nd.setDate(nd.getDate() + interval);
+    updateCard(id, { ease, interval, reps, due: toK(nd), lapses: (card.lapses || 0) + (q === 0 ? 1 : 0) });
+    setFcShow(false);
+    setFcQueue((prev) => { const rest = prev.slice(1); return q === 0 ? [...rest, id] : rest; });
+  };
+
   const resetAll = async () => {
     if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
-    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]); setColumns(DEFAULT_COLS); setSchedule(null);
+    const ns = mkSubs(); setSubjects(ns); setRecords([]); setGoals([]); setTasks([]); setColumns(DEFAULT_COLS); setSchedule(null); setDecks([]); setCards([]); setFcView("decks");
     setSec(0); setTOn(false); setTP(false); setTText(""); setTAccum(0); setTStartedAt(null);
     setPmOn(false); setPmMode("focus"); setPmSec(pomo.focus * 60); setPmCount(0);
     setConfirmReset(false); flash("Tudo resetado!");
@@ -539,7 +595,7 @@ export default function EstudoFlow({ user }) {
 
   const cDIM = new Date(calY, calM+1, 0).getDate(), cFD = new Date(calY, calM, 1).getDay();
   const nav = (p) => { setPg(p); setSb(false); };
-  const menus = [{n:"Dashboard",i:LayoutDashboard},{n:"Conteúdos",i:BookOpen},{n:"Tarefas",i:ListTodo},{n:"Quadro",i:Columns3},{n:"Pomodoro",i:Timer},{n:"Cronograma",i:CalendarRange},{n:"Conquistas",i:Trophy},{n:"Histórico",i:Clock},{n:"Relatórios",i:BarChart3},{n:"Configurações",i:Settings},{n:"Sobre",i:Info}];
+  const menus = [{n:"Dashboard",i:LayoutDashboard},{n:"Conteúdos",i:BookOpen},{n:"Tarefas",i:ListTodo},{n:"Quadro",i:Columns3},{n:"Pomodoro",i:Timer},{n:"Cronograma",i:CalendarRange},{n:"Flashcards",i:Layers},{n:"Conquistas",i:Trophy},{n:"Histórico",i:Clock},{n:"Relatórios",i:BarChart3},{n:"Configurações",i:Settings},{n:"Sobre",i:Info}];
 
   const BtnAct = ({ children, color, onClick, disabled }) => (
     <button onClick={onClick} disabled={disabled} className={`inline-flex items-center gap-1 px-3.5 py-2 rounded-lg ${color} text-white text-xs font-bold shadow-md transition hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed`}>{children}</button>
@@ -1166,6 +1222,103 @@ export default function EstudoFlow({ user }) {
               </div>
             )}
 
+            {/* FLASHCARDS */}
+            {pg==="Flashcards"&&(
+              <div className="space-y-4 max-w-4xl">
+                {fcView==="decks"&&(<>
+                  <div className="flex items-center justify-between">
+                    <p className={`text-xs ${mu}`}>{decks.length} baralhos · {cards.length} cartas</p>
+                    <button onClick={openAddDeck} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Novo baralho</button>
+                  </div>
+                  {decks.length===0?(
+                    <div className={`${cd} rounded-xl p-10 text-center`}>
+                      <Layers size={32} className={`mx-auto mb-2 ${mu}`}/>
+                      <p className={`text-sm font-bold ${tx}`}>Nenhum baralho ainda</p>
+                      <p className={`text-xs ${mu}`}>Crie um baralho e adicione cartas (frente/verso) 👆</p>
+                    </div>
+                  ):(
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {decks.map((d)=>{const total=cards.filter((c)=>c.deckId===d.id).length; const due=dueCount(d.id); return (
+                        <div key={d.id} className={`${cd} rounded-xl p-4 group`}>
+                          <div className="flex items-start justify-between">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{background:d.color+"22"}}><Layers size={17} style={{color:d.color}}/></div>
+                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                              <button onClick={()=>openEditDeck(d)} className={`p-1.5 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
+                              <button onClick={()=>delDeck(d.id)} className="p-1.5 rounded-md hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
+                            </div>
+                          </div>
+                          <p className={`text-sm font-bold ${tx} mt-2 truncate`}>{d.name}</p>
+                          <p className={`text-[11px] ${mu}`}>{total} cartas · {due>0?<span className="text-indigo-500 font-bold">{due} para revisar</span>:"em dia ✓"}</p>
+                          <div className="flex gap-2 mt-3">
+                            <button onClick={()=>startStudy(d.id)} disabled={due===0} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold shadow disabled:opacity-40"><Brain size={14}/>Estudar{due>0?` (${due})`:""}</button>
+                            <button onClick={()=>{setFcDeck(d.id);setFcView("cards");}} className={`px-3 py-2 rounded-lg text-xs font-bold ${dk?"bg-white/5 text-gray-300":"bg-gray-100 text-gray-600"}`}>Cartas</button>
+                          </div>
+                        </div>
+                      );})}
+                    </div>
+                  )}
+                </>)}
+
+                {fcView==="cards"&&(()=>{const d=decks.find((x)=>x.id===fcDeck); const cs=cards.filter((c)=>c.deckId===fcDeck); return (<>
+                  <div className="flex items-center justify-between">
+                    <button onClick={()=>setFcView("decks")} className={`flex items-center gap-1 text-xs font-bold ${mu} hover:underline`}><ArrowLeft size={14}/>Baralhos</button>
+                    <button onClick={()=>openAddCard(fcDeck)} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold shadow"><Plus size={14}/>Nova carta</button>
+                  </div>
+                  <p className={`text-sm font-bold ${tx}`}>{d?.name} <span className={`text-xs font-normal ${mu}`}>· {cs.length} cartas</span></p>
+                  <div className="space-y-2">
+                    {cs.map((c)=>(
+                      <div key={c.id} className={`${cd} rounded-xl p-3 flex items-start gap-3 group`}>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-[13px] font-semibold ${tx}`}>{c.front}</p>
+                          <p className={`text-[12px] ${mu} mt-0.5`}>{c.back}</p>
+                        </div>
+                        <span className={`text-[9px] ${mu} flex-shrink-0`}>{c.due?("rev "+c.due.split("-").reverse().slice(0,2).join("/")):"nova"}</span>
+                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
+                          <button onClick={()=>openEditCard(c)} className={`p-1.5 rounded-md ${dk?"hover:bg-white/10":"hover:bg-gray-100"}`}><Edit3 size={12} className={mu}/></button>
+                          <button onClick={()=>delCard(c.id)} className="p-1.5 rounded-md hover:bg-red-500/10"><Trash2 size={12} className="text-red-400"/></button>
+                        </div>
+                      </div>
+                    ))}
+                    {cs.length===0&&<div className={`${cd} rounded-xl p-8 text-center text-xs ${mu}`}>Sem cartas. Adicione a primeira 👆</div>}
+                  </div>
+                </>);})()}
+
+                {fcView==="study"&&(()=>{
+                  const id=fcQueue[0]; const card=cards.find((c)=>c.id===id);
+                  if(!card) return (
+                    <div className={`${cd} rounded-2xl p-10 text-center`}>
+                      <Trophy size={36} className="mx-auto mb-3 text-amber-500"/>
+                      <p className={`text-lg font-bold ${tx}`}>Revisão concluída! 🎉</p>
+                      <p className={`text-xs ${mu} mb-4`}>Você revisou todas as cartas pendentes deste baralho.</p>
+                      <button onClick={()=>setFcView("decks")} className="px-4 py-2.5 rounded-xl bg-indigo-500 text-white text-sm font-bold">Voltar aos baralhos</button>
+                    </div>
+                  );
+                  return (
+                    <div className="max-w-lg mx-auto space-y-4">
+                      <div className="flex items-center justify-between">
+                        <button onClick={()=>setFcView("decks")} className={`flex items-center gap-1 text-xs font-bold ${mu} hover:underline`}><ArrowLeft size={14}/>Sair</button>
+                        <span className={`text-xs font-bold ${mu}`}>{fcQueue.length} restantes</span>
+                      </div>
+                      <div className={`${cd} rounded-2xl p-8 min-h-[220px] flex flex-col items-center justify-center text-center`}>
+                        <p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-3`}>Frente</p>
+                        <p className={`text-lg font-bold ${tx}`}>{card.front}</p>
+                        {fcShow&&<><div className={`w-full my-4 border-t border-dashed ${dk?"border-white/10":"border-gray-200"}`}/><p className={`text-[9px] font-bold ${mu} uppercase tracking-widest mb-2`}>Verso</p><p className={`text-base ${dk?"text-gray-200":"text-gray-700"}`}>{card.back}</p></>}
+                      </div>
+                      {!fcShow?(
+                        <button onClick={()=>setFcShow(true)} className="w-full py-3 rounded-xl bg-indigo-500 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><RotateCw size={15}/>Mostrar resposta</button>
+                      ):(
+                        <div className="grid grid-cols-4 gap-2">
+                          {[{q:0,l:"Errei",c:"bg-red-500"},{q:1,l:"Difícil",c:"bg-amber-500"},{q:2,l:"Bom",c:"bg-emerald-500"},{q:3,l:"Fácil",c:"bg-blue-500"}].map((b)=>(
+                            <button key={b.q} onClick={()=>rateCard(b.q)} className={`py-2.5 rounded-xl ${b.c} text-white text-xs font-bold shadow hover:brightness-110`}>{b.l}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             {/* CONQUISTAS (GAMIFICAÇÃO) */}
             {pg==="Conquistas"&&(()=>{
               const totalMin=records.reduce((a,r)=>a+r.duration,0); const totalH=totalMin/60;
@@ -1409,6 +1562,22 @@ export default function EstudoFlow({ user }) {
           </div>
           <button onClick={saveCol} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{colId?"Salvar":"Criar status"}</button>
           {colId && columns.length>1 && <button onClick={()=>{delCol(colId);cl();}} className="w-full py-2 rounded-xl bg-red-500/10 text-red-500 font-bold text-xs flex items-center justify-center gap-1.5"><Trash2 size={13}/>Excluir este status</button>}
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="deck"} onClose={cl} title={dkId?"Editar Baralho":"Novo Baralho"} dk={dk}>
+        <div className="space-y-2.5">
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Nome</label><input value={dkName} onChange={(e)=>setDkName(e.target.value)} className={ip} placeholder="Ex: Inglês — Vocabulário" autoFocus/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Cor</label><div className="flex gap-1.5 flex-wrap">{COLS.map((c)=><button key={c} onClick={()=>setDkColor(c)} className={`w-6 h-6 rounded-md transition ${dkColor===c?"scale-110 ring-2 ring-offset-1 ring-indigo-500":""}`} style={{background:c}}/>)}</div></div>
+          <button onClick={saveDeck} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{dkId?"Salvar":"Criar"}</button>
+        </div>
+      </Mdl>
+
+      <Mdl open={mt==="card"} onClose={cl} title={cdId?"Editar Carta":"Nova Carta"} dk={dk}>
+        <div className="space-y-2.5">
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Frente (pergunta)</label><textarea value={cdFront} onChange={(e)=>setCdFront(e.target.value)} rows={2} className={ip} placeholder="Ex: O que significa 'ephemeral'?" autoFocus/></div>
+          <div><label className={`text-[9px] ${mu} mb-0.5 block`}>Verso (resposta)</label><textarea value={cdBack} onChange={(e)=>setCdBack(e.target.value)} rows={3} className={ip} placeholder="A resposta..."/></div>
+          <button onClick={saveCard} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm shadow flex items-center justify-center gap-1.5"><Save size={14}/>{cdId?"Salvar":"Criar"}</button>
         </div>
       </Mdl>
 

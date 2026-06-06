@@ -58,6 +58,20 @@ pessoa tem sua própria conta e seus dados são totalmente isolados.
 - **Tempo estimado e utilizado** — ao concluir, o tempo é **lançado no histórico** e conta nos gráficos/contadores
 - Lista e quadro **compartilham os mesmos dados** — criou na lista, aparece no quadro
 
+### ⏲️ Pomodoro
+- Ciclos de **Foco / Pausa / Pausa longa** configuráveis, com contador de ciclos
+- Vincule um conteúdo: ao concluir o foco, o tempo é **lançado no histórico**
+
+### 🗓️ Cronograma
+- Escolha dias da semana + blocos por dia → **distribui os conteúdos** (sorteados) automaticamente
+
+### 🃏 Flashcards (repetição espaçada)
+- Baralhos e cartas (frente/verso) com algoritmo estilo **Anki/SM-2**
+- Modo de estudo: **Errei / Difícil / Bom / Fácil** agenda a próxima revisão
+
+### 🏆 Conquistas (gamificação)
+- **XP e níveis** (tempo + tarefas + sequência), **desafio semanal** e **troféus** que desbloqueiam
+
 ### 🕓 Histórico
 - Lista filtrável por **categoria** e **conteúdo**
 - **Seleção múltipla** para exclusão em lote
