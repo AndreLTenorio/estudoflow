@@ -474,6 +474,7 @@ export default function EstudoFlow({ user }) {
   useEffect(() => { if (pmOn && pmSec === 0) pomoTransition(); }, [pmSec, pmOn]); // eslint-disable-line
   const pmReset = () => { setPmOn(false); setPmMode("focus"); setPmSec(pomo.focus * 60); };
   const pmSetMode = (m) => { setPmOn(false); setPmMode(m); setPmSec((m === "focus" ? pomo.focus : m === "short" ? pomo.short : pomo.long) * 60); };
+  const pmSkip = () => pomoTransition();
 
   // ── Cronograma ──
   const DOW = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
