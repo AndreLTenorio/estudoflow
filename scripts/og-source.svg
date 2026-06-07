@@ -20,14 +20,14 @@
   <!-- ===== Tudo dentro do quadrado central (x 285..915) com margem =====
        Empilhado e centralizado em x=600 -->
 
-  <!-- icon tile 210x210 centralizado -->
-  <rect x="495" y="115" width="210" height="210" rx="46" fill="url(#tile)" stroke="#ffffff" stroke-opacity="0.55" stroke-width="3"/>
-  <g transform="translate(495,115) scale(3.28)" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- icon tile 250x250 centralizado -->
+  <rect x="475" y="92" width="250" height="250" rx="54" fill="url(#tile)" stroke="#ffffff" stroke-opacity="0.55" stroke-width="3.5"/>
+  <g transform="translate(475,92) scale(3.906)" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
     <path d="M32 19c-4-3-9-4-14-4-1 0-2 .8-2 2v25c0 1.2 1 2 2.2 1.9 4.6-.4 9.6.6 13.8 3.6"/>
     <path d="M32 19c4-3 9-4 14-4 1 0 2 .8 2 2v25c0 1.2-1 2-2.2 1.9-4.6-.4-9.6.6-13.8 3.6"/>
     <path d="M32 19v28.5"/>
   </g>
 
   <!-- nome embaixo, centralizado -->
-  <text x="600" y="455" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="82" font-weight="800" fill="#ffffff" letter-spacing="-1.5">EstudoFlow</text>
+  <text x="600" y="490" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="96" font-weight="800" fill="#ffffff" letter-spacing="-1.5">EstudoFlow</text>
 </svg>
