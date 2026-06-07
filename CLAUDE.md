@@ -120,3 +120,10 @@ Mensagens de commit em PT-BR, descritivas, com `Co-Authored-By`.
 - **2026-06-07:** favicon adicionado — `public/favicon.svg` (livro aberto, gradiente
   índigo→violeta da marca) + `index.html` com `icon`/`apple-touch-icon`/`theme-color`
   (#6366f1). Commit `f0a8f4c`.
+- **2026-06-07:** prévia de link (Open Graph) p/ WhatsApp/redes — `public/og-image.png`
+  1200×630 (logo + nome grandes, sem frases — texto pequeno fica ilegível no thumbnail),
+  gerada de `scripts/og-source.svg` via `sharp` (instalado com `--no-save`, não fica no
+  projeto; regerar: `node -e "require('sharp')('scripts/og-source.svg').png().toFile('public/og-image.png')"`).
+  `index.html` ganhou meta `og:*`/`twitter:*` com **URL absoluta** (exigência do WhatsApp) +
+  `description`. Commits `1ecd82f`, `365cbec`. **WhatsApp tem cache de prévia**: forçar via
+  Sharing Debugger do Facebook (Scrape Again) ou mandar a URL com query nova (`?v=N`).
