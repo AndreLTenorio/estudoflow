@@ -117,3 +117,6 @@ Mensagens de commit em PT-BR, descritivas, com `Co-Authored-By`.
   de 10 cartas); IA (gerador) adicionada e **depois removida** a pedido; categorias de conteúdo
   editáveis; avatar com foto. Dois incidentes de tela branca resolvidos (TDZ e `pmSkip`).
   Barras de rolagem tema-aware.
+- **2026-06-07:** favicon adicionado — `public/favicon.svg` (livro aberto, gradiente
+  índigo→violeta da marca) + `index.html` com `icon`/`apple-touch-icon`/`theme-color`
+  (#6366f1). Commit `f0a8f4c`.
