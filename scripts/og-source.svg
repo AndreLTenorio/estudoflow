@@ -6,34 +6,26 @@
       <stop offset="1" stop-color="#8b5cf6"/>
     </linearGradient>
     <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.08"/>
     </linearGradient>
   </defs>
 
   <rect width="1200" height="630" fill="url(#bg)"/>
 
-  <!-- glow decor -->
-  <circle cx="1040" cy="120" r="260" fill="#ffffff" opacity="0.07"/>
-  <circle cx="120" cy="560" r="200" fill="#ffffff" opacity="0.06"/>
+  <!-- soft glow decor -->
+  <circle cx="1060" cy="110" r="280" fill="#ffffff" opacity="0.07"/>
+  <circle cx="120" cy="560" r="220" fill="#ffffff" opacity="0.06"/>
 
-  <!-- icon tile -->
-  <rect x="120" y="170" width="150" height="150" rx="34" fill="url(#tile)" stroke="#ffffff" stroke-opacity="0.5" stroke-width="2"/>
-  <g transform="translate(120,170) scale(2.34)" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- centered group: icon + wordmark -->
+  <!-- icon tile (220x220) -->
+  <rect x="175" y="205" width="220" height="220" rx="48" fill="url(#tile)" stroke="#ffffff" stroke-opacity="0.55" stroke-width="3"/>
+  <g transform="translate(175,205) scale(3.44)" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
     <path d="M32 19c-4-3-9-4-14-4-1 0-2 .8-2 2v25c0 1.2 1 2 2.2 1.9 4.6-.4 9.6.6 13.8 3.6"/>
     <path d="M32 19c4-3 9-4 14-4 1 0 2 .8 2 2v25c0 1.2-1 2-2.2 1.9-4.6-.4-9.6.6-13.8 3.6"/>
     <path d="M32 19v28.5"/>
   </g>
 
-  <!-- wordmark -->
-  <text x="300" y="250" font-family="'Segoe UI', Arial, sans-serif" font-size="78" font-weight="800" fill="#ffffff">EstudoFlow</text>
-  <text x="302" y="300" font-family="'Segoe UI', Arial, sans-serif" font-size="33" font-weight="500" fill="#e9e7ff">Controle pessoal de estudos</text>
-
-  <!-- tagline -->
-  <text x="120" y="430" font-family="'Segoe UI', Arial, sans-serif" font-size="40" font-weight="700" fill="#ffffff">Registre, acompanhe e evolua.</text>
-  <text x="120" y="482" font-family="'Segoe UI', Arial, sans-serif" font-size="28" font-weight="400" fill="#ddd9ff">Cronômetro · Metas · Flashcards · Pomodoro · Relatórios</text>
-
-  <!-- url pill -->
-  <rect x="120" y="525" width="372" height="56" rx="28" fill="#ffffff" opacity="0.16"/>
-  <text x="148" y="562" font-family="'Segoe UI', Arial, sans-serif" font-size="26" font-weight="600" fill="#ffffff">estudoflow-two.vercel.app</text>
+  <!-- wordmark, vertically centered with the tile -->
+  <text x="438" y="347" font-family="'Segoe UI', Arial, sans-serif" font-size="112" font-weight="800" fill="#ffffff" letter-spacing="-2">EstudoFlow</text>
 </svg>
